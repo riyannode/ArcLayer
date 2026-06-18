@@ -437,9 +437,12 @@ async function main() {
               result?: unknown;
             }>;
           },
+          finalizeFn: async (txHash: string) => {
+            return services.finalizeIdentityRegistration(txHash);
+          },
         });
 
-        console.log(`\n${result.action === "already_confirmed" ? "✅" : result.action === "registered" ? "🔧" : "⚠️"} ${result.message}`);
+        console.log(`\n${result.action === "already_confirmed" || result.action === "confirmed_pending" ? "✅" : result.action === "registered" ? "🔧" : "⚠️"} ${result.message}`);
 
         if (result.identity.tokenId) {
           console.log(`   Token ID: ${result.identity.tokenId}`);

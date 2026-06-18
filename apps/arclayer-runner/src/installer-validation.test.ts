@@ -269,6 +269,24 @@ describe("CLI command validation", () => {
     expect(index).toContain("idempotencyKey: string");
     expect(index).toContain("metadataURI, idempotencyKey");
   });
+
+  it("index.ts passes finalizeFn to ensureIdentity", () => {
+    const index = readRelative("apps/arclayer-runner/src/index.ts");
+    expect(index).toContain("finalizeFn:");
+    expect(index).toContain("finalizeIdentityRegistration");
+  });
+
+  it("index.ts shows confirmed_pending as success", () => {
+    const index = readRelative("apps/arclayer-runner/src/index.ts");
+    expect(index).toContain('result.action === "confirmed_pending"');
+  });
+
+  it("services.ts has finalizeIdentityRegistration method", () => {
+    const source = readRelative("apps/arclayer-runner/src/services.ts");
+    expect(source).toContain("async finalizeIdentityRegistration(txHash: string)");
+    expect(source).toContain("totalSupply");
+    expect(source).toContain("ownerOf(uint256)");
+  });
 });
 
 describe("provider worker code quality", () => {

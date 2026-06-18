@@ -367,6 +367,62 @@ describe("identity-ensure", () => {
       expect(result.action).toBe("registered");
       expect(registerFn).toHaveBeenCalledTimes(1);
     });
+
+    it("full CLI path: first run registers, second run finalizes to tokenId", async () => {
+      // Simulate first run: register and get pending
+      const registerFn = vi.fn().mockResolvedValue({ ok: true, txHash: "0x111" });
+      const finalizeFn = vi.fn();
+
+      const firstResult = await ensureIdentity({
+        agentName: "test-agent",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        registerFn,
+        finalizeFn,
+      });
+
+      expect(firstResult.action).toBe("registered");
+      expect(firstResult.identity.txHash).toBe("0x111");
+
+      // Verify state is pending
+      const identityAfterFirst = readIdentityState();
+      expect(identityAfterFirst.status).toBe("pending");
+
+      // Simulate second run: finalizeFn returns confirmed
+      const finalizeFn2 = vi.fn().mockResolvedValue({
+        status: "confirmed" as const,
+        tokenId: "42",
+      });
+
+      const secondResult = await ensureIdentity({
+        agentName: "test-agent",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        registerFn: vi.fn(), // should NOT be called
+        finalizeFn: finalizeFn2,
+      });
+
+      expect(secondResult.action).toBe("confirmed_pending");
+      expect(secondResult.identity.tokenId).toBe("42");
+
+      // Verify identity was written as confirmed
+      const identityAfterSecond = readIdentityState();
+      expect(identityAfterSecond.status).toBe("confirmed");
+      expect(identityAfterSecond.tokenId).toBe("42");
+
+      // Third run: should be already_confirmed (no finalizeFn needed)
+      const thirdResult = await ensureIdentity({
+        agentName: "test-agent",
+        role: "provider",
+        autoRegister: true,
+        registerFn: vi.fn(),
+      });
+
+      expect(thirdResult.action).toBe("already_confirmed");
+      expect(thirdResult.identity.tokenId).toBe("42");
+    });
   });
 
   describe("buildMetadataURI", () => {

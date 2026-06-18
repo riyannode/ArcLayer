@@ -1424,6 +1424,78 @@ export class RunnerServices {
   }
 
   /**
+   * Finalize a pending ERC-8004 identity registration.
+   *
+   * Scans the identity registry backwards from totalSupply to find the
+   * token owned by the configured wallet. This handles the case where
+   * the register() tx succeeded but the tokenId was not captured (e.g.
+   * process crashed between tx submission and result parsing).
+   *
+   * Returns confirmed with tokenId if found, still_pending if registry
+   * query fails (tx may not be indexed yet), or reverted/not_found.
+   */
+  async finalizeIdentityRegistration(txHash: string): Promise<{
+    status: "confirmed" | "still_pending" | "reverted" | "not_found";
+    tokenId?: string;
+  }> {
+    if (!this.config.circleWalletAddress) {
+      return { status: "not_found" };
+    }
+    if (!this.wallet.queryContract) {
+      return { status: "still_pending" };
+    }
+
+    try {
+      // Query totalSupply to know the upper bound for scanning
+      const supplyResult = await this.wallet.queryContract({
+        signature: "totalSupply()",
+        params: [],
+        contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+        chain: this.config.chain,
+      });
+
+      const supplyJson = supplyResult.json as { outputs?: string[] } | undefined;
+      const totalSupply = Number(supplyJson?.outputs?.[0] ?? "0");
+      if (totalSupply <= 0) {
+        return { status: "still_pending" };
+      }
+
+      // Scan backwards from totalSupply to find token owned by our wallet
+      // In practice, most wallets have 1 identity token, so this is O(1-3)
+      const MAX_SCAN = Math.min(totalSupply, 50);
+      const walletLower = this.config.circleWalletAddress.toLowerCase();
+
+      for (let i = 0; i < MAX_SCAN; i++) {
+        const tokenId = String(totalSupply - i);
+        try {
+          const ownerResult = await this.wallet.queryContract({
+            signature: "ownerOf(uint256)",
+            params: [tokenId],
+            contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+            chain: this.config.chain,
+          });
+          const ownerJson = ownerResult.json as { outputs?: string[] } | undefined;
+          const owner = (ownerJson?.outputs?.[0] ?? "").toLowerCase();
+
+          if (owner === walletLower) {
+            // Found our token — optionally verify tokenURI matches
+            return { status: "confirmed", tokenId };
+          }
+        } catch {
+          // Token may not exist (burned), skip
+          continue;
+        }
+      }
+
+      // Token not found in scan range — tx may still be pending
+      return { status: "still_pending" };
+    } catch {
+      // Registry query failed — tx may not be indexed yet
+      return { status: "still_pending" };
+    }
+  }
+
+  /**
    * Register ERC-8004 identity via wallet adapter and sync to erc8004_agents.
    * Called by ApprovalManager after approval is approved.
    *

@@ -510,6 +510,107 @@ describe("RunnerServices", () => {
     });
   });
 
+  describe("finalizeIdentityRegistration", () => {
+    it("returns not_found when wallet address is missing", async () => {
+      // Cannot create RunnerServices without wallet address for circle-dev rail.
+      // Test the method directly by mocking the config.
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+      // Override config.walletAddress to undefined after construction
+      const config = (enabledServices as any).config;
+      const origAddr = config.circleWalletAddress;
+      config.circleWalletAddress = undefined;
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc");
+      expect(result.status).toBe("not_found");
+
+      config.circleWalletAddress = origAddr;
+    });
+
+    it("finds tokenId by scanning registry backwards", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+
+      // Mock wallet.queryContract
+      const wallet = (enabledServices as any).wallet;
+      const originalQuery = wallet.queryContract;
+      wallet.queryContract = vi.fn()
+        // totalSupply() → 5
+        .mockResolvedValueOnce({ json: { outputs: ["5"] } })
+        // ownerOf(5) → different wallet
+        .mockResolvedValueOnce({ json: { outputs: ["0x9999999999999999999999999999999999999999"] } })
+        // ownerOf(4) → our wallet
+        .mockResolvedValueOnce({ json: { outputs: [makeConfig().circleWalletAddress!.toLowerCase()] } });
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc");
+      expect(result.status).toBe("confirmed");
+      expect(result.tokenId).toBe("4");
+
+      wallet.queryContract = originalQuery;
+    });
+
+    it("returns still_pending when totalSupply is 0", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+
+      const wallet = (enabledServices as any).wallet;
+      const originalQuery = wallet.queryContract;
+      wallet.queryContract = vi.fn()
+        .mockResolvedValueOnce({ json: { outputs: ["0"] } });
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc");
+      expect(result.status).toBe("still_pending");
+
+      wallet.queryContract = originalQuery;
+    });
+
+    it("returns still_pending when queryContract throws", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+
+      const wallet = (enabledServices as any).wallet;
+      const originalQuery = wallet.queryContract;
+      wallet.queryContract = vi.fn().mockRejectedValue(new Error("RPC down"));
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc");
+      expect(result.status).toBe("still_pending");
+
+      wallet.queryContract = originalQuery;
+    });
+
+    it("returns still_pending when token not found in scan range", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+
+      const wallet = (enabledServices as any).wallet;
+      const originalQuery = wallet.queryContract;
+      wallet.queryContract = vi.fn()
+        // totalSupply() → 3
+        .mockResolvedValueOnce({ json: { outputs: ["3"] } })
+        // ownerOf(3) → different
+        .mockResolvedValueOnce({ json: { outputs: ["0x9999"] } })
+        // ownerOf(2) → different
+        .mockResolvedValueOnce({ json: { outputs: ["0x9999"] } })
+        // ownerOf(1) → different
+        .mockResolvedValueOnce({ json: { outputs: ["0x9999"] } });
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc");
+      expect(result.status).toBe("still_pending");
+
+      wallet.queryContract = originalQuery;
+    });
+  });
+
   describe("old tools still work (backward compatibility)", () => {
     it("prepareRegister still delegates to MCP", async () => {
       const result = await services.prepareRegister({
