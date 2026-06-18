@@ -435,13 +435,35 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
         };
       }
 
+      // No txHash = ambiguous response. Re-read on-chain before marking done.
+      if (!txHash) {
+        log(`[live] job ${jobId}: set_budget no txHash, re-reading on-chain budget`);
+        const recheck = await checkOnChainBudget(jobId);
+        if (recheck.hasBudget) {
+          markOnChainExisting(jobId, recheck.budgetAtomic, recheck.budgetUsdc);
+          log(`[live] job ${jobId}: budget confirmed on-chain after ambiguous response (${recheck.budgetUsdc} USDC)`);
+          return {
+            stage: "set_budget",
+            status: "done",
+            detail: `budget confirmed on-chain: ${recheck.budgetUsdc} USDC (ambiguous response, re-read confirmed)`,
+          };
+        }
+        log(`[live] job ${jobId}: set_budget no txHash AND no on-chain budget, writing .waiting`);
+        markStageWaiting(jobId, "set_budget", "no txHash and budget not on-chain");
+        return {
+          stage: "set_budget",
+          status: "waiting",
+          detail: "ambiguous response: no txHash, budget not on-chain",
+        };
+      }
+
       markStageDone(jobId, "set_budget", {
         txHash,
         amount: EFFECTIVE_BUDGET,
         originalRequested: REQUESTED_BUDGET,
         maxCap: MAX_BUDGET,
       });
-      log(`[live] job ${jobId}: budget set, tx=${txHash || "(no txHash)"}`);
+      log(`[live] job ${jobId}: budget set, tx=${txHash}`);
       return {
         stage: "set_budget",
         status: "done",
@@ -536,13 +558,30 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
 
       log(`[live] job ${jobId}: running (run_only)`);
       try {
+        const jobDesc = job.description || `Process ERC-8183 job ${jobId}`;
         const result = (await runnerPost("/erc8183/provider/run-only", {
           jobId,
           taskId: `live-${jobId}`,
           agentId: AGENT_ID,
           provider: PROVIDER_WALLET,
-          task: job.description || `Process ERC-8183 job ${jobId}`,
-          description: job.description || `Process ERC-8183 job ${jobId}`,
+          description: jobDesc,
+          input: {
+            jobId,
+            description: jobDesc,
+            provider: PROVIDER_WALLET,
+            agentId: AGENT_ID,
+            acceptanceCriteria: [
+              {
+                id: "deliver",
+                description: "Produce deliverable",
+                mandatory: true,
+              },
+            ],
+            commercialTerms: {
+              proposedBudgetUsdc: EFFECTIVE_BUDGET,
+              clientWillFund: true,
+            },
+          },
           acceptanceCriteria: [
             {
               id: "deliver",
@@ -557,9 +596,25 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
         })) as Record<string, unknown>;
 
         const deliverableHash = String(result["deliverableHash"] ?? "");
+        const runOk = result["ok"] !== false;
+        const runStatus = String(result["status"] ?? result["state"] ?? "");
+
+        if (!runOk || !deliverableHash || deliverableHash === "undefined") {
+          const reason = !runOk
+            ? "Runner returned ok=false"
+            : "missing_deliverableHash";
+          log(`[live] job ${jobId}: run_only not completed (${reason}), writing .waiting`);
+          markStageWaiting(jobId, "run_only", reason);
+          return {
+            stage: "run_only",
+            status: "waiting",
+            detail: reason,
+          };
+        }
+
         markStageDone(jobId, "run_only", { deliverableHash });
         log(
-          `[live] job ${jobId}: run_only done, hash=${deliverableHash || "(none)"}`
+          `[live] job ${jobId}: run_only done, hash=${deliverableHash.slice(0, 18)}...`
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

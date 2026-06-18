@@ -293,18 +293,18 @@ process.on("SIGTERM", () => {
 
 // ── Entry ───────────────────────────────────────────────────────────────
 
-workerLoop().catch((err) => {
-  console.error("[provider-agent] fatal:", err);
-  process.exit(1);
-});
-
-// ── Live Mode (deterministic driver) ──────────────────────────────────────
-
 const LIVE_MODE = process.env.LIVE_MODE === "true";
 
 if (LIVE_MODE) {
+  console.log("[provider-agent] LIVE_MODE=true — starting deterministic live-driver only");
   runLiveDriver().catch((err) => {
     console.error("[live-driver] fatal:", err);
+    process.exit(1);
+  });
+} else {
+  console.log("[provider-agent] LIVE_MODE=false — starting legacy worker loop");
+  workerLoop().catch((err) => {
+    console.error("[provider-agent] fatal:", err);
     process.exit(1);
   });
 }
