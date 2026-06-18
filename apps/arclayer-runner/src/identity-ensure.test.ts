@@ -1048,4 +1048,169 @@ describe("identity-ensure", () => {
       expect(result.message).toContain("[10,20]");
     });
   });
+
+  describe("Fail-closed: getLogs chunk error blocks auto-register", () => {
+    it("throws when getLogs fails for a chunk and autoRegister=true blocks mint", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      let callCount = 0;
+
+      const failingOnChain = {
+        balanceOf: async () => 1n,
+        ownerOf: async () => wallet,
+        getLogs: async () => {
+          callCount++;
+          if (callCount === 1) {
+            throw new Error("RPC rate limit exceeded");
+          }
+          return [];
+        },
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: wallet,
+        registerFn,
+        _onChainOverride: failingOnChain,
+      });
+
+      expect(result.action).toBe("failed");
+      expect(result.message).toContain("On-chain identity scan failed");
+      expect(result.message).toContain("Auto-register blocked");
+      expect(registerFn).not.toHaveBeenCalled();
+    });
+
+    it("does not call registerFn when getLogs chunk throws", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+
+      const failingOnChain = {
+        balanceOf: async () => 1n,
+        ownerOf: async () => wallet,
+        getLogs: async () => { throw new Error("getLogs timeout"); },
+      };
+
+      const registerFn = vi.fn();
+      await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: wallet,
+        registerFn,
+        _onChainOverride: failingOnChain,
+      });
+
+      expect(registerFn).not.toHaveBeenCalled();
+    });
+
+    it("throws when balanceOf > 0 but no tokenIds found due to incomplete scan", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const paddedTokenId = "0x" + BigInt(100).toString(16).padStart(64, "0");
+
+      // balanceOf returns 1, getLogs returns a mint event, but ownerOf says different owner
+      // This means the token was transferred away but balance is still > 0
+      // (edge case: multiple tokens, one transferred away, but scan only found the transferred one)
+      const incompleteOnChain = {
+        balanceOf: async () => 1n,
+        ownerOf: async () => "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // different owner
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678",
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: wallet,
+        registerFn,
+        _onChainOverride: incompleteOnChain,
+      });
+
+      // Should fail closed — scan found mint events but none are currently owned
+      expect(result.action).toBe("failed");
+      expect(result.message).toContain("scan failed");
+      expect(registerFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Successful scan still works", () => {
+    it("finds tokenId and reuses identity after successful scan", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const tokenId = "782224";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async (id: bigint) => id.toString() === tokenId ? wallet : "0x0000000000000000000000000000000000000000",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678",
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: wallet,
+        registerFn,
+        _onChainOverride: onChainOverride,
+      });
+
+      expect(result.action).toBe("confirmed_onchain");
+      expect(result.identity.tokenId).toBe(tokenId);
+      expect(registerFn).not.toHaveBeenCalled();
+    });
+
+    it("provider tokenId 782224 read-first path is safe", async () => {
+      // Simulate the exact VPS scenario: wallet 0xbcbf...8af2 has tokenId 782224
+      const wallet = "0xbcbf06e5e79d5dd61a6a606ad2d4d2bd034e8af2";
+      const tokenId = "782224";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async (id: bigint) => id.toString() === tokenId ? wallet : "0x0000000000000000000000000000000000000000",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x000000000000000000000000bcbf06e5e79d5dd61a6a606ad2d4d2bd034e8af2",
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test-provider",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: wallet,
+        registerFn,
+        _onChainOverride: onChainOverride,
+      });
+
+      // Should find existing identity, NOT mint
+      expect(result.action).toBe("confirmed_onchain");
+      expect(result.identity.tokenId).toBe("782224");
+      expect(registerFn).not.toHaveBeenCalled();
+    });
+  });
 });
