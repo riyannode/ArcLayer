@@ -23,7 +23,7 @@ function cleanupDb(dbPath: string) {
 
 // ── Mocks ─────────────────────────────────────────────────────────────
 
-function makeMockWalletExecuteResult(overrides: Partial<WalletExecuteResult> = {}): WalletExecuteResult {
+function makeWalletExecuteResult(overrides: Partial<WalletExecuteResult> = {}): WalletExecuteResult {
   return {
     command: "circle",
     args: ["wallet", "execute", "submit(uint256,bytes32,bytes)", "1", "0xabc", "0x", "--contract", "0x0747", "--address", "0x3c46", "--chain", "ARC-TESTNET", "--output", "json"],
@@ -45,12 +45,12 @@ function makeBroadcastWalletExecuteResult(): WalletExecuteResult {
   };
 }
 
-function makeMockCircle() {
+function makeTestWallet() {
   return {
-    executeErc8183Write: vi.fn().mockResolvedValue(makeMockWalletExecuteResult()),
-    approveUsdc: vi.fn().mockResolvedValue(makeMockWalletExecuteResult()),
-    executeAllowedArcWrite: vi.fn().mockResolvedValue(makeMockWalletExecuteResult()),
-    queryContract: vi.fn().mockResolvedValue(makeMockWalletExecuteResult()),
+    executeErc8183Write: vi.fn().mockResolvedValue(makeWalletExecuteResult()),
+    approveUsdc: vi.fn().mockResolvedValue(makeWalletExecuteResult()),
+    executeAllowedArcWrite: vi.fn().mockResolvedValue(makeWalletExecuteResult()),
+    queryContract: vi.fn().mockResolvedValue(makeWalletExecuteResult()),
   } as any;
 }
 
@@ -77,16 +77,16 @@ function makeInput(overrides: Partial<WriteOperationInput> = {}): WriteOperation
 
 describe("ExecutionGateway", () => {
   let gateway: ExecutionGateway;
-  let circle: ReturnType<typeof makeMockCircle>;
+  let wallet: ReturnType<typeof makeTestWallet>;
   let receipts: ReturnType<typeof makeMockReceipts>;
   let dbPath: string;
 
   beforeEach(() => {
-    circle = makeMockCircle();
+    wallet = makeTestWallet();
     receipts = makeMockReceipts();
     dbPath = tmpDbPath();
     const journal = new OperationJournal(dbPath);
-    gateway = new ExecutionGateway(circle, receipts, {
+    gateway = new ExecutionGateway(wallet, receipts, {
       agentId: "agent-1",
       circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
       chain: "ARC-TESTNET",
@@ -102,7 +102,7 @@ describe("ExecutionGateway", () => {
 
   describe("operation state transitions", () => {
     it("transitions created → confirmed through full lifecycle", async () => {
-      const executeFn: WalletExecuteFn = async () => makeMockWalletExecuteResult();
+      const executeFn: WalletExecuteFn = async () => makeWalletExecuteResult();
       const result = await gateway.execute(makeInput(), executeFn);
 
       expect(result.ok).toBe(true);
@@ -113,7 +113,7 @@ describe("ExecutionGateway", () => {
     it("transitions created → failed when wallet address is missing", async () => {
       const subPath = tmpDbPath();
       const subJournal = new OperationJournal(subPath);
-      const gw = new ExecutionGateway(circle, receipts, {
+      const gw = new ExecutionGateway(wallet, receipts, {
         agentId: "agent-1",
         chain: "ARC-TESTNET",
       }, subJournal);
@@ -132,7 +132,7 @@ describe("ExecutionGateway", () => {
       cleanupDb(subPath);
     });
 
-    it("transitions executing → failed when Circle CLI throws non-timeout error", async () => {
+    it("transitions executing → failed when wallet adapter throws non-timeout error", async () => {
       const executeFn: WalletExecuteFn = async () => {
         throw new Error("Insufficient funds in wallet");
       };
@@ -144,7 +144,7 @@ describe("ExecutionGateway", () => {
       expect(result.errorCode).toBe("BROADCAST_FAILED");
     });
 
-    it("transitions executing → unknown when Circle CLI times out", async () => {
+    it("transitions executing → unknown when wallet adapter times out", async () => {
       const executeFn: WalletExecuteFn = async () => {
         const err = new Error("Operation timed out");
         err.name = "AbortError";
@@ -158,7 +158,7 @@ describe("ExecutionGateway", () => {
       expect(result.errorCode).toBe("UNKNOWN_TX_STATE");
     });
 
-    it("transitions executing → unknown when Circle CLI timeout message", async () => {
+    it("transitions executing → unknown when wallet adapter timeout message", async () => {
       const executeFn: WalletExecuteFn = async () => {
         throw new Error("ETIMEDOUT: connection timeout");
       };
@@ -175,7 +175,7 @@ describe("ExecutionGateway", () => {
 
   describe("idempotency", () => {
     it("returns idempotent result for same idempotencyKey + same paramsHash", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
 
       // First execution
       const result1 = await gateway.execute(makeInput(), executeFn);
@@ -193,7 +193,7 @@ describe("ExecutionGateway", () => {
     });
 
     it("throws IDEMPOTENCY_CONFLICT for same idempotencyKey + different paramsHash", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
 
       // First execution
       await gateway.execute(makeInput(), executeFn);
@@ -216,7 +216,7 @@ describe("ExecutionGateway", () => {
       expect(result1.state).toBe("failed");
 
       // Second execution with same key+params should succeed
-      const successFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const successFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       const result2 = await gateway.execute(makeInput(), successFn);
       expect(result2.state).toBe("confirmed");
       expect(result2.idempotent).toBeUndefined();
@@ -235,9 +235,9 @@ describe("ExecutionGateway", () => {
         callCount++;
         if (callCount === 1) {
           await firstExecution;
-          return makeMockWalletExecuteResult();
+          return makeWalletExecuteResult();
         }
-        return makeMockWalletExecuteResult();
+        return makeWalletExecuteResult();
       };
 
       // Start first execution (won't complete until we resolve)
@@ -369,7 +369,7 @@ describe("ExecutionGateway", () => {
       const input1 = makeInput({ idempotencyKey: "approveUsdc:job-42:0.01" });
       const input2 = makeInput({ idempotencyKey: "approveUsdc:job-99:0.01" });
 
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
 
       // Both should succeed independently
       const result1 = await gateway.execute(input1, executeFn);
@@ -386,7 +386,7 @@ describe("ExecutionGateway", () => {
 
   describe("assertGatewayWriteSucceeded", () => {
     it("confirmed result does not throw", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       const result = await gateway.execute(makeInput(), executeFn);
       expect(result.state).toBe("confirmed");
       expect(() => assertGatewayWriteSucceeded(result)).not.toThrow();
@@ -452,7 +452,7 @@ describe("ExecutionGateway", () => {
     });
 
     it("confirmed idempotent replay does not throw", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
 
       // First execution → confirmed
       const result1 = await gateway.execute(makeInput(), executeFn);
@@ -469,7 +469,7 @@ describe("ExecutionGateway", () => {
 
   describe("query operations", () => {
     it("getOperation returns the operation record", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       const result = await gateway.execute(makeInput(), executeFn);
 
       const record = gateway.getOperation(result.operationId);
@@ -479,7 +479,7 @@ describe("ExecutionGateway", () => {
     });
 
     it("getOperationsByState returns operations in a given state", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       await gateway.execute(makeInput(), executeFn);
 
       const confirmed = gateway.getOperationsByState("confirmed");
@@ -493,7 +493,7 @@ describe("ExecutionGateway", () => {
     it("operationCount tracks total operations", async () => {
       expect(gateway.operationCount).toBe(0);
 
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       await gateway.execute(makeInput(), executeFn);
 
       expect(gateway.operationCount).toBe(1);
@@ -537,7 +537,7 @@ describe("ExecutionGateway", () => {
 
   describe("restart survival", () => {
     it("confirmed replay survives restart", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       const result = await gateway.execute(makeInput(), executeFn);
       expect(result.state).toBe("confirmed");
 
@@ -545,7 +545,7 @@ describe("ExecutionGateway", () => {
       gateway.close();
       const journal2 = new OperationJournal(dbPath);
 
-      const gateway2 = new ExecutionGateway(circle, receipts, {
+      const gateway2 = new ExecutionGateway(wallet, receipts, {
         agentId: "agent-1",
         circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
         chain: "ARC-TESTNET",
@@ -573,7 +573,7 @@ describe("ExecutionGateway", () => {
       gateway.close();
       const journal2 = new OperationJournal(dbPath);
 
-      const gateway2 = new ExecutionGateway(circle, receipts, {
+      const gateway2 = new ExecutionGateway(wallet, receipts, {
         agentId: "agent-1",
         circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
         chain: "ARC-TESTNET",
@@ -596,7 +596,7 @@ describe("ExecutionGateway", () => {
       gateway.close();
       const journal2 = new OperationJournal(dbPath);
 
-      const gateway2 = new ExecutionGateway(circle, receipts, {
+      const gateway2 = new ExecutionGateway(wallet, receipts, {
         agentId: "agent-1",
         circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
         chain: "ARC-TESTNET",
@@ -621,14 +621,14 @@ describe("ExecutionGateway", () => {
       gateway.close();
       const journal2 = new OperationJournal(dbPath);
 
-      const gateway2 = new ExecutionGateway(circle, receipts, {
+      const gateway2 = new ExecutionGateway(wallet, receipts, {
         agentId: "agent-1",
         circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
         chain: "ARC-TESTNET",
       }, journal2);
 
       // Retry should succeed
-      const successFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const successFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       const result2 = await gateway2.execute(makeInput(), successFn);
       expect(result2.state).toBe("confirmed");
 
@@ -653,9 +653,9 @@ describe("ExecutionGateway", () => {
         callCount++;
         if (callCount === 1) {
           await firstExecution;
-          return makeMockWalletExecuteResult();
+          return makeWalletExecuteResult();
         }
-        return makeMockWalletExecuteResult();
+        return makeWalletExecuteResult();
       };
 
       // Start first execution (acquires wallet lock)
@@ -672,7 +672,7 @@ describe("ExecutionGateway", () => {
     });
 
     it("wallet lock releases on confirmed", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       await gateway.execute(makeInput(), executeFn);
 
       // After confirmed, wallet lock should be released
@@ -687,7 +687,7 @@ describe("ExecutionGateway", () => {
       await gateway.execute(makeInput(), failFn);
 
       // Lock released — subsequent operations on same wallet should work
-      const successFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const successFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       const result = await gateway.execute(makeInput(), successFn);
       expect(result.state).toBe("confirmed");
     });
@@ -711,9 +711,9 @@ describe("ExecutionGateway", () => {
         callCount++;
         if (callCount === 1) {
           await firstExecution;
-          return makeMockWalletExecuteResult();
+          return makeWalletExecuteResult();
         }
-        return makeMockWalletExecuteResult();
+        return makeWalletExecuteResult();
       };
 
       const promise1 = gateway.execute(input1, slowExecuteFn);
@@ -729,7 +729,7 @@ describe("ExecutionGateway", () => {
 
     it("job lock releases on confirmed", async () => {
       const jobId = "job-42";
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
+      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeWalletExecuteResult());
       await gateway.execute(makeInput({ jobId }), executeFn);
 
       // Lock released — subsequent operations on same job should work

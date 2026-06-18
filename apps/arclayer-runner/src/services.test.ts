@@ -281,8 +281,8 @@ describe("RunnerServices", () => {
   });
 
   describe("x402 server-side 409 idempotent-safe", () => {
-    it("treats Circle CLI 409 error as idempotent success", async () => {
-      // Mock payService to throw like Circle CLI does on server 409
+    it("treats wallet adapter 409 error as idempotent success", async () => {
+      // Mock payService to throw like wallet adapter does on server 409
       const paySpy = vi.spyOn(services.wallet, "payService").mockRejectedValue(
         new Error("Payment submitted but request failed with HTTP 409.\nServer response: You already have an active access session for this resource.")
       );
@@ -304,7 +304,7 @@ describe("RunnerServices", () => {
       paySpy.mockRestore();
     });
 
-    it("still throws for non-409 Circle CLI errors", async () => {
+    it("still throws for non-409 wallet adapter errors", async () => {
       const paySpy = vi.spyOn(services.wallet, "payService").mockRejectedValue(
         new Error("Insufficient funds in wallet")
       );
@@ -385,7 +385,7 @@ describe("RunnerServices", () => {
       ).rejects.toThrow(/already in progress/);
     });
 
-    it("normal non-timeout Circle CLI failure still calls ledger.recordFailure", async () => {
+    it("normal non-timeout wallet adapter failure still calls ledger.recordFailure", async () => {
       const paySpy = vi.spyOn(services.wallet, "payService").mockRejectedValue(
         new Error("Insufficient funds in wallet")
       );
@@ -449,7 +449,7 @@ describe("RunnerServices", () => {
           input: { prompt: "do work" }
         });
       } catch {
-        // Expected: Circle CLI not available in test env
+        // Expected: wallet adapter not available in test env
       }
 
       expect(startSpy).toHaveBeenCalledWith("42");
@@ -478,7 +478,7 @@ describe("RunnerServices", () => {
     });
   });
 
-  describe("register_via_circle_cli guard", () => {
+  describe("register_via_wallet_adapter guard", () => {
     it("blocks register when allowIdentityRegister=false (default)", async () => {
       const guardedServices = new RunnerServices(
         makeConfig({ allowIdentityRegister: false }),
@@ -535,7 +535,7 @@ describe("RunnerServices", () => {
           input: { prompt: "do work" }
         });
       } catch {
-        // Expected: Circle CLI not available
+        // Expected: wallet adapter not available
       }
 
       expect(runSpy).toHaveBeenCalled();
@@ -545,7 +545,7 @@ describe("RunnerServices", () => {
       // Verify the method exists and accepts the right params
       expect(services.submitDeliverableViaWallet).toBeDefined();
 
-      // Will fail at CLI — gateway wraps as RunnerError via assertGatewayWriteSucceeded
+      // Will fail at wallet adapter — gateway wraps as RunnerError via assertGatewayWriteSucceeded
       try {
         await services.submitDeliverableViaWallet({
           jobId: "42",
@@ -553,7 +553,7 @@ describe("RunnerServices", () => {
         });
         expect.fail("should have thrown");
       } catch (error) {
-        // Expected: gateway wraps CLI failure as RunnerError
+        // Expected: gateway wraps wallet adapter failure as RunnerError
         expect(error).toBeInstanceOf(RunnerError);
         expect((error as RunnerError).code).toBe("BROADCAST_FAILED");
       }
@@ -898,7 +898,7 @@ describe("runProviderJob", () => {
     input: { prompt: "do work" }
   };
 
-  it("completed result returns runtime result without Circle CLI submit", async () => {
+  it("completed result returns runtime result without wallet adapter submit", async () => {
     const circleSpy = vi.spyOn(services.wallet, "executeErc8183Write");
     const result = await services.runProviderJob(validJob);
 
@@ -906,12 +906,12 @@ describe("runProviderJob", () => {
     expect(result.status).toBe("completed");
     expect(result.deliverableHash).toBeDefined();
     expect(result.deliverableHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
-    // Circle CLI must NOT be called
+    // wallet adapter must NOT be called
     expect(circleSpy).not.toHaveBeenCalled();
     circleSpy.mockRestore();
   });
 
-  it("failed result returns controlled error without Circle CLI submit", async () => {
+  it("failed result returns controlled error without wallet adapter submit", async () => {
     const failRuntime: RuntimeConnector = {
       kind: "mock",
       async run() {
@@ -957,7 +957,7 @@ describe("runProviderJob", () => {
       status: "needs_payment",
       paymentRequests: expect.any(Array)
     }));
-    // no Circle CLI submit
+    // no wallet adapter submit
     expect(circleSpy).not.toHaveBeenCalled();
     circleSpy.mockRestore();
   });
@@ -989,7 +989,7 @@ describe("runProviderJob", () => {
       status: "needs_action",
       actionRequests: expect.any(Array)
     }));
-    // no Circle CLI submit
+    // no wallet adapter submit
     expect(circleSpy).not.toHaveBeenCalled();
     circleSpy.mockRestore();
   });
@@ -1129,7 +1129,7 @@ describe("submitProviderDeliverable", () => {
     ).rejects.toThrow(/jobId must be a numeric string/);
   });
 
-  it("calls prepareSubmitDeliverable before Circle CLI submit", async () => {
+  it("calls prepareSubmitDeliverable before wallet adapter submit", async () => {
     const prepareSpy = vi.spyOn(mcp, "prepareSubmitDeliverable");
     const submitSpy = vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,

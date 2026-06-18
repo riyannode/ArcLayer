@@ -3,8 +3,8 @@ import { describe, it, expect, vi } from "vitest";
 // Mock the circle-dev-wallet-adapter module BEFORE importing the factory
 vi.mock("@arclayer/circle-dev-wallet-adapter", () => {
   return {
-    CircleDevWalletAdapter: class MockCircleDevWalletAdapter {
-      readonly _mockBrand = "circle-dev";
+    CircleDevWalletAdapter: class StubCircleDevWalletAdapter {
+      readonly _mockBrand = "circle-dev-stub";
       constructor(public opts: unknown) {}
     },
   };
@@ -51,14 +51,14 @@ describe("createWalletAdapter", () => {
     runnerSecret: "test-runner-secret-long-enough",
   };
 
-  it("returns CircleDevWalletAdapter by default", () => {
+  it("factory returns adapter instance by default (constructor-boundary stub)", () => {
     const adapter = createWalletAdapter(baseConfig);
-    expect((adapter as any)._mockBrand).toBe("circle-dev");
+    expect((adapter as any)._mockBrand).toBe("circle-dev-stub");
   });
 
-  it("returns CircleDevWalletAdapter when walletRail is circle-dev", () => {
+  it("factory returns adapter instance when walletRail is circle-dev (constructor-boundary stub)", () => {
     const adapter = createWalletAdapter(baseConfig);
-    expect((adapter as any)._mockBrand).toBe("circle-dev");
+    expect((adapter as any)._mockBrand).toBe("circle-dev-stub");
   });
 
   it("throws for unsupported walletRail", () => {

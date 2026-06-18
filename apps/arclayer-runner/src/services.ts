@@ -156,6 +156,7 @@ async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
 export class RunnerServices {
   readonly receipts: JsonlReceiptStore;
   readonly ledger: SpendingLedger;
+  readonly spendLedger: SpendLedger;
   /** @internal — use gateway.execute() for writes. */
   readonly wallet: WalletExecutionAdapter;
   readonly gateway: ExecutionGateway;
@@ -169,12 +170,39 @@ export class RunnerServices {
   ) {
     this.receipts = new JsonlReceiptStore(config.dataDir);
     this.ledger = new SpendingLedger(config.dataDir);
+    this.spendLedger = new SpendLedger(config.dataDir);
     this.wallet = createWalletAdapter(config);
     this.gateway = new ExecutionGateway(this.wallet, this.receipts, {
       agentId: config.agentId,
       circleWalletAddress: config.circleWalletAddress,
       chain: config.chain,
       dataDir: config.dataDir,
+    }, undefined, {
+      assertAllowed: (input) => {
+        assertSpendPolicy({
+          policy: this.resolveSpendPolicy(input.walletAddress),
+          action: input.action,
+          contract: input.contract,
+          method: input.method,
+          amountUsdc: input.amountUsdc,
+          dailySpentUsdc: this.spendLedger.getSpent({ walletAddress: input.walletAddress, window: "daily" }),
+          monthlySpentUsdc: this.spendLedger.getSpent({ walletAddress: input.walletAddress, window: "monthly" }),
+        });
+      },
+      reserveSpend: (input) => {
+        this.spendLedger.append({
+          id: crypto.randomUUID(),
+          walletAddress: input.walletAddress,
+          agentId: input.agentId,
+          action: input.action,
+          amountUsdc: input.amountUsdc,
+          state: "reserved",
+          operationId: input.operationId,
+          idempotencyKey: input.idempotencyKey,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      },
     });
     this.approvalManager = new ApprovalManager(
       this,
@@ -201,11 +229,9 @@ export class RunnerServices {
         "runtime_connector",
         "erc8004_identity_guard",
         "erc8183_provider_lifecycle",
-        "x402_nanopayment",
-        "batch_payment",
-        this.config.walletRail === "circle-dev"
-          ? "circle_dev_wallet_adapter"
-          : "circle_cli_adapter",
+        ...(typeof this.wallet.payService === "function" ? ["x402_nanopayment"] : []),
+        ...(typeof this.wallet.payService === "function" ? ["batch_payment"] : []),
+        "circle_dev_wallet_adapter",
         "receipt_proof_store",
         "spending_ledger",
         "mcp_bridge",
@@ -1699,6 +1725,7 @@ export class RunnerServices {
           maxAmountUsdc: payment.maxAmountUsdc,
           address: this.config.circleWalletAddress!,
           chain: this.config.chain,
+          idempotencyKey,
           signal,
         });
 
