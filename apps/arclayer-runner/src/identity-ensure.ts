@@ -306,10 +306,13 @@ export async function scanExistingIdentityOnChain(
     ? BigInt(process.env.ARCLAYER_ERC8004_SCAN_FROM_BLOCK)
     : 40_000_000n;
 
-  // Get current block — use balanceOf as a proxy to detect chain is reachable,
-  // then scan logs. In override mode we don't have getBlock, so scan a bounded range.
-  let latestBlock = scanFromBlock + 100_000n; // bounded fallback
-  if (!_viemOverride) {
+  // Get current block — in real RPC mode, failure is fatal (fail closed).
+  // In test override mode, use a bounded fallback since we don't have getBlock.
+  let latestBlock: bigint;
+  if (_viemOverride) {
+    // Test override mode: bounded fallback is safe
+    latestBlock = scanFromBlock + 100_000n;
+  } else {
     try {
       const { createPublicClient, http } = await import("viem");
       const arcTestnet = {
@@ -320,9 +323,8 @@ export async function scanExistingIdentityOnChain(
       } as const;
       const client = createPublicClient({ chain: arcTestnet, transport: http() });
       latestBlock = await client.getBlockNumber();
-    } catch {
-      // Fallback: use a reasonable upper bound
-      latestBlock = scanFromBlock + 100_000n;
+    } catch (err) {
+      throw new Error(`On-chain scan failed: getBlockNumber() error — ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -341,8 +343,9 @@ export async function scanExistingIdentityOnChain(
           tokenIdSet.add(tokenId);
         }
       }
-    } catch {
-      // Chunk may be too large — continue with next chunk
+    } catch (err) {
+      // If balance > 0 but getLogs fails, the scan is incomplete — fail closed
+      throw new Error(`On-chain scan failed: getLogs() chunk error (blocks ${fromBlock}-${toBlock}) — ${err instanceof Error ? err.message : String(err)}`);
     }
     fromBlock = toBlock + 1n;
   }
@@ -358,6 +361,16 @@ export async function scanExistingIdentityOnChain(
     } catch {
       // Burned or invalid tokenId — skip
     }
+  }
+
+  // Fail-closed: if balance > 0 but scan found fewer currently-owned tokens than
+  // expected, the scan may be incomplete (e.g., mint events outside scan range).
+  // In auto-register mode this would risk duplicate mint, so throw.
+  if (balance > 0n && found.length === 0 && tokenIdSet.size > 0) {
+    throw new Error(
+      `On-chain scan incomplete: balanceOf=${balance} but 0 currently-owned tokens found (${tokenIdSet.size} mint events scanned, all transferred away or burned). ` +
+      `Cannot safely determine identity state. Set ARCLAYER_ERC8004_SCAN_FROM_BLOCK to an earlier block.`
+    );
   }
 
   return found;
