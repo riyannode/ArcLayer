@@ -63,8 +63,118 @@ export const TOOL_NAME_MAP: Record<string, ToolMapEntry> = {
   arclayer_provider_set_budget: {
     runnerPath: "/erc8183/provider/set-budget",
     method: "POST",
-    mcpName: "erc8183.provider_set_budget",
+    mcpName: "erc8183.set_budget",
     risk: "write",
+  },
+
+  // ── Provider Runtime (Console MCP proxy) ────────────────────────────
+  arclayer_provider_get_context: {
+    runnerPath: "/provider/context",
+    method: "POST",
+    mcpName: "provider.runtime_get_context",
+    risk: "read",
+  },
+  arclayer_provider_get_resume_plan: {
+    runnerPath: "/provider/resume-plan",
+    method: "POST",
+    mcpName: "provider.runtime_get_resume_plan",
+    risk: "read",
+  },
+  arclayer_provider_heartbeat: {
+    runnerPath: "/provider/heartbeat",
+    method: "POST",
+    mcpName: "provider.runtime_heartbeat",
+    risk: "write",
+  },
+  arclayer_provider_start_job: {
+    runnerPath: "/provider/start-job",
+    method: "POST",
+    mcpName: "provider.runtime_start_job",
+    risk: "write",
+  },
+  arclayer_provider_write_checkpoint: {
+    runnerPath: "/provider/write-checkpoint",
+    method: "POST",
+    mcpName: "provider.runtime_write_checkpoint",
+    risk: "write",
+  },
+  arclayer_provider_retry_job: {
+    runnerPath: "/provider/retry-job",
+    method: "POST",
+    mcpName: "provider.runtime_retry_job",
+    risk: "write",
+  },
+  arclayer_provider_complete_run: {
+    runnerPath: "/provider/complete-run",
+    method: "POST",
+    mcpName: "provider.runtime_complete_run",
+    risk: "write",
+  },
+
+  // ── Provider Marketplace ────────────────────────────────────────────
+  arclayer_provider_list_assigned_jobs: {
+    runnerPath: "/provider/list-assigned-jobs",
+    method: "POST",
+    mcpName: "provider.list_assigned_jobs",
+    risk: "read",
+  },
+  arclayer_provider_list_assigned_jobs_extended: {
+    runnerPath: "/provider/list-assigned-jobs-extended",
+    method: "POST",
+    mcpName: "provider.list_assigned_jobs_extended",
+    risk: "read",
+  },
+  arclayer_provider_list_open_jobs: {
+    runnerPath: "/provider/list-open-jobs",
+    method: "POST",
+    mcpName: "provider.list_open_jobs",
+    risk: "read",
+  },
+  arclayer_provider_list_my_open_job_applications: {
+    runnerPath: "/provider/list-my-open-job-applications",
+    method: "POST",
+    mcpName: "provider.list_my_open_job_applications",
+    risk: "read",
+  },
+  arclayer_provider_apply_open_job: {
+    runnerPath: "/provider/apply-open-job",
+    method: "POST",
+    mcpName: "provider.apply_open_job",
+    risk: "write",
+  },
+  arclayer_provider_withdraw_open_job_application: {
+    runnerPath: "/provider/withdraw-open-job-application",
+    method: "POST",
+    mcpName: "provider.withdraw_open_job_application",
+    risk: "write",
+  },
+  arclayer_provider_publish_deliverable: {
+    runnerPath: "/provider/publish-deliverable",
+    method: "POST",
+    mcpName: "provider.publish_deliverable",
+    risk: "write",
+  },
+
+  // ── Provider Submit Deliverable (runner-local) ──────────────────────
+  arclayer_provider_submit_deliverable: {
+    runnerPath: "/erc8183/provider/submit-deliverable",
+    method: "POST",
+    mcpName: "erc8183.provider_submit_deliverable",
+    risk: "write",
+  },
+
+  // ── Job Status (Console MCP proxy) ──────────────────────────────────
+  arclayer_job_status: {
+    runnerPath: "/jobs/onchain-status",
+    method: "POST",
+    mcpName: "jobs.get_onchain_status",
+    risk: "read",
+  },
+  arclayer_job_lifecycle_summary: {
+    runnerPath: "/jobs/lifecycle-summary",
+    method: "POST",
+    mcpName: "jobs.get_lifecycle_summary",
+    risk: "read",
   },
 };
 

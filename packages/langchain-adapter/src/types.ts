@@ -72,6 +72,10 @@ export type CreateArcLayerLangChainToolsOptions = {
   enableProviderRunAndSubmit?: boolean;
   /** Explicit opt-in for arclayer_provider_set_budget (provider role only). Default: false. */
   enableProviderSetBudget?: boolean;
+  /** Explicit opt-in for arclayer_provider_publish_deliverable (provider role only). Default: false. */
+  enableProviderPublishDeliverable?: boolean;
+  /** Explicit opt-in for arclayer_provider_submit_deliverable (provider role only). Default: false. */
+  enableProviderSubmitDeliverable?: boolean;
   /** Provider complexity-based pricing policy. Uses defaults if not set. */
   providerPricingPolicy?: ProviderPricingPolicy;
   timeoutMs?: number;
@@ -142,6 +146,27 @@ export type X402BatchPayInput = {
   batchId: string;
   taskId: string;
   payments: X402BatchPayPayment[];
+};
+
+// ── Provider Runtime Schemas (input shapes for proxy-to-console tools) ────
+
+/** Generic input for provider runtime proxy tools that take a JSON body. */
+export type ProviderProxyInput = Record<string, unknown>;
+
+/** Input for arclayer_provider_submit_deliverable. */
+export type ProviderSubmitDeliverableInput = {
+  jobId: string;
+  deliverableHash: string;
+};
+
+/** Input for arclayer_job_status. */
+export type JobStatusInput = {
+  jobId: string;
+};
+
+/** Input for arclayer_job_lifecycle_summary. */
+export type JobLifecycleSummaryInput = {
+  jobId: string;
 };
 
 // ── Provider Runtime Schemas (input shapes for ERC-8183 tools) ──────────────

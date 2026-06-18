@@ -21,22 +21,59 @@ type RoleToolOverrides = {
   deniedTools?: string[];
   enableProviderRunAndSubmit?: boolean;
   enableProviderSetBudget?: boolean;
+  enableProviderPublishDeliverable?: boolean;
+  enableProviderSubmitDeliverable?: boolean;
 };
 
 const PROVIDER_RUN_AND_SUBMIT_TOOL = "arclayer_provider_run_and_submit";
 const PROVIDER_QUOTE_JOB_TOOL = "arclayer_provider_quote_job";
 const PROVIDER_SET_BUDGET_TOOL = "arclayer_provider_set_budget";
+const PROVIDER_SUBMIT_DELIVERABLE_TOOL = "arclayer_provider_submit_deliverable";
+
+/** All provider runtime proxy tools (read + write). */
+const PROVIDER_RUNTIME_TOOLS = [
+  "arclayer_provider_get_context",
+  "arclayer_provider_get_resume_plan",
+  "arclayer_provider_heartbeat",
+  "arclayer_provider_start_job",
+  "arclayer_provider_write_checkpoint",
+  "arclayer_provider_retry_job",
+  "arclayer_provider_complete_run",
+];
+
+/** All provider marketplace tools (read + apply/withdraw). */
+const PROVIDER_MARKETPLACE_TOOLS = [
+  "arclayer_provider_list_assigned_jobs",
+  "arclayer_provider_list_assigned_jobs_extended",
+  "arclayer_provider_list_open_jobs",
+  "arclayer_provider_list_my_open_job_applications",
+  "arclayer_provider_apply_open_job",
+  "arclayer_provider_withdraw_open_job_application",
+];
+
+/** Provider deliverable + on-chain write tools (opt-in). */
+const PROVIDER_ONCHAIN_WRITE_TOOLS = [
+  "arclayer_provider_publish_deliverable",
+  "arclayer_provider_submit_deliverable",
+];
+
+/** Shared read tools available to all roles. */
+const SHARED_READ_TOOLS = [
+  "arclayer_x402_inspect",
+  "arclayer_receipts",
+  "arclayer_spend_ledger",
+  "arclayer_job_status",
+  "arclayer_job_lifecycle_summary",
+];
 
 const ROLE_PRESETS: RolePreset[] = [
   {
     id: "read-only",
     title: "Read Only",
     description:
-      "Can inspect x402 resources, read receipts and ledger. No payments.",
+      "Can inspect x402 resources, read receipts, ledger, job status, and lifecycle. No payments.",
     allowedTools: [
-      "arclayer_x402_inspect",
-      "arclayer_receipts",
-      "arclayer_spend_ledger",
+      ...SHARED_READ_TOOLS,
     ],
     // No runnerRole — SDK-only filter
   },
@@ -44,13 +81,11 @@ const ROLE_PRESETS: RolePreset[] = [
     id: "x402-agent",
     title: "x402 Agent",
     description:
-      "Can inspect, pay, batch pay x402 resources, read receipts and ledger.",
+      "Can inspect, pay, batch pay x402 resources, read receipts, ledger, job status, and lifecycle.",
     allowedTools: [
-      "arclayer_x402_inspect",
+      ...SHARED_READ_TOOLS,
       "arclayer_x402_pay",
       "arclayer_x402_batch_pay",
-      "arclayer_receipts",
-      "arclayer_spend_ledger",
     ],
     runnerRole: "x402-agent",
   },
@@ -58,11 +93,12 @@ const ROLE_PRESETS: RolePreset[] = [
     id: "provider",
     title: "Provider",
     description:
-      "Can quote job complexity, run ERC-8183 provider jobs, read receipts and ledger. Run-only is default; run-and-submit and set-budget require explicit opt-in.",
+      "Full provider surface: runtime tools, marketplace, quote, run-only. " +
+      "Run-and-submit, set-budget, submit-deliverable, publish-deliverable require explicit opt-in.",
     allowedTools: [
-      "arclayer_x402_inspect",
-      "arclayer_receipts",
-      "arclayer_spend_ledger",
+      ...SHARED_READ_TOOLS,
+      ...PROVIDER_RUNTIME_TOOLS,
+      ...PROVIDER_MARKETPLACE_TOOLS,
       "arclayer_provider_run_only",
       "arclayer_provider_quote_job",
     ],
@@ -72,11 +108,9 @@ const ROLE_PRESETS: RolePreset[] = [
     id: "evaluator",
     title: "Evaluator",
     description:
-      "Can read receipts and ledger. ERC-8183 evaluator tools (future PR).",
+      "Can read receipts, ledger, job status, and lifecycle. ERC-8183 evaluator tools (future PR).",
     allowedTools: [
-      "arclayer_x402_inspect",
-      "arclayer_receipts",
-      "arclayer_spend_ledger",
+      ...SHARED_READ_TOOLS,
     ],
     runnerRole: "evaluator",
   },
@@ -84,11 +118,9 @@ const ROLE_PRESETS: RolePreset[] = [
     id: "client",
     title: "Client",
     description:
-      "Can read receipts and ledger. ERC-8183 client tools (future PR).",
+      "Can read receipts, ledger, job status, and lifecycle. ERC-8183 client tools (future PR).",
     allowedTools: [
-      "arclayer_x402_inspect",
-      "arclayer_receipts",
-      "arclayer_spend_ledger",
+      ...SHARED_READ_TOOLS,
     ],
     runnerRole: "client",
   },
@@ -120,6 +152,16 @@ export function getArcLayerToolsForRole(
   // Explicit opt-in: add set-budget only for provider role when enabled
   if (role === "provider" && overrides?.enableProviderSetBudget) {
     tools.push(PROVIDER_SET_BUDGET_TOOL);
+  }
+
+  // Explicit opt-in: add publish-deliverable only for provider role when enabled
+  if (role === "provider" && overrides?.enableProviderPublishDeliverable) {
+    tools.push("arclayer_provider_publish_deliverable");
+  }
+
+  // Explicit opt-in: add submit-deliverable only for provider role when enabled
+  if (role === "provider" && overrides?.enableProviderSubmitDeliverable) {
+    tools.push(PROVIDER_SUBMIT_DELIVERABLE_TOOL);
   }
 
   // Deduplicate

@@ -7,11 +7,13 @@ import {
 
 describe("roles", () => {
   describe("getArcLayerToolsForRole", () => {
-    it("read-only gets only inspect, receipts, ledger", () => {
+    it("read-only gets only inspect, receipts, ledger, job status, lifecycle", () => {
       const tools = getArcLayerToolsForRole("read-only");
       expect(tools).toContain("arclayer_x402_inspect");
       expect(tools).toContain("arclayer_receipts");
       expect(tools).toContain("arclayer_spend_ledger");
+      expect(tools).toContain("arclayer_job_status");
+      expect(tools).toContain("arclayer_job_lifecycle_summary");
       expect(tools).not.toContain("arclayer_x402_pay");
       expect(tools).not.toContain("arclayer_x402_batch_pay");
     });
@@ -31,9 +33,86 @@ describe("roles", () => {
       expect(tools).toContain("arclayer_receipts");
       expect(tools).toContain("arclayer_spend_ledger");
       expect(tools).toContain("arclayer_provider_run_only");
+      expect(tools).toContain("arclayer_provider_quote_job");
       expect(tools).not.toContain("arclayer_provider_run_and_submit");
       expect(tools).not.toContain("arclayer_x402_pay");
       expect(tools).not.toContain("arclayer_x402_batch_pay");
+    });
+
+    it("provider default includes all runtime tools", () => {
+      const tools = getArcLayerToolsForRole("provider");
+      expect(tools).toContain("arclayer_provider_get_context");
+      expect(tools).toContain("arclayer_provider_get_resume_plan");
+      expect(tools).toContain("arclayer_provider_heartbeat");
+      expect(tools).toContain("arclayer_provider_start_job");
+      expect(tools).toContain("arclayer_provider_write_checkpoint");
+      expect(tools).toContain("arclayer_provider_retry_job");
+      expect(tools).toContain("arclayer_provider_complete_run");
+    });
+
+    it("provider default includes all marketplace tools", () => {
+      const tools = getArcLayerToolsForRole("provider");
+      expect(tools).toContain("arclayer_provider_list_assigned_jobs");
+      expect(tools).toContain("arclayer_provider_list_assigned_jobs_extended");
+      expect(tools).toContain("arclayer_provider_list_open_jobs");
+      expect(tools).toContain("arclayer_provider_list_my_open_job_applications");
+      expect(tools).toContain("arclayer_provider_apply_open_job");
+      expect(tools).toContain("arclayer_provider_withdraw_open_job_application");
+    });
+
+    it("provider default includes job status and lifecycle", () => {
+      const tools = getArcLayerToolsForRole("provider");
+      expect(tools).toContain("arclayer_job_status");
+      expect(tools).toContain("arclayer_job_lifecycle_summary");
+    });
+
+    it("provider default does NOT include on-chain write tools", () => {
+      const tools = getArcLayerToolsForRole("provider");
+      expect(tools).not.toContain("arclayer_provider_publish_deliverable");
+      expect(tools).not.toContain("arclayer_provider_submit_deliverable");
+      expect(tools).not.toContain("arclayer_provider_set_budget");
+      expect(tools).not.toContain("arclayer_provider_run_and_submit");
+    });
+
+    it("provider can opt into publish_deliverable", () => {
+      const tools = getArcLayerToolsForRole("provider", {
+        enableProviderPublishDeliverable: true,
+      });
+      expect(tools).toContain("arclayer_provider_publish_deliverable");
+    });
+
+    it("provider can opt into submit_deliverable", () => {
+      const tools = getArcLayerToolsForRole("provider", {
+        enableProviderSubmitDeliverable: true,
+      });
+      expect(tools).toContain("arclayer_provider_submit_deliverable");
+    });
+
+    it("non-provider roles cannot access provider runtime tools", () => {
+      for (const role of ["read-only", "x402-agent", "evaluator", "client"] as const) {
+        const tools = getArcLayerToolsForRole(role);
+        expect(tools).not.toContain("arclayer_provider_get_context");
+        expect(tools).not.toContain("arclayer_provider_heartbeat");
+        expect(tools).not.toContain("arclayer_provider_start_job");
+        expect(tools).not.toContain("arclayer_provider_list_assigned_jobs");
+        expect(tools).not.toContain("arclayer_provider_apply_open_job");
+      }
+    });
+
+    it("non-provider roles cannot access provider on-chain tools even with opt-in flags", () => {
+      // Opt-in flags only work for provider role
+      for (const role of ["read-only", "x402-agent", "evaluator", "client"] as const) {
+        const tools = getArcLayerToolsForRole(role, {
+          enableProviderRunAndSubmit: true,
+          enableProviderSetBudget: true,
+          enableProviderPublishDeliverable: true,
+          enableProviderSubmitDeliverable: true,
+        });
+        expect(tools).not.toContain("arclayer_provider_run_and_submit");
+        expect(tools).not.toContain("arclayer_provider_set_budget");
+        expect(tools).not.toContain("arclayer_provider_publish_deliverable");
+        expect(tools).not.toContain("arclayer_provider_submit_deliverable");
+      }
     });
 
     it("provider can opt into run-and-submit explicitly", () => {
@@ -197,6 +276,52 @@ describe("roles", () => {
         expect(preset.id).toBeTruthy();
         expect(preset.title).toBeTruthy();
         expect(preset.description).toBeTruthy();
+      }
+    });
+  });
+
+  describe("source validation", () => {
+    it("no raw provider.runtime_* names in langchain adapter source", async () => {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const toolMapSrc = fs.readFileSync(
+        path.resolve(import.meta.dirname, "../tool-map.ts"), "utf8"
+      );
+      const rolesSrc = fs.readFileSync(
+        path.resolve(import.meta.dirname, "../roles.ts"), "utf8"
+      );
+      const toolsSrc = fs.readFileSync(
+        path.resolve(import.meta.dirname, "../tools.ts"), "utf8"
+      );
+      // mcpName field in tool-map.ts is OK (internal mapping), but roles.ts and tools.ts must not reference raw names
+      expect(rolesSrc).not.toMatch(/provider\.runtime_/);
+      expect(rolesSrc).not.toMatch(/provider\.list_/);
+      expect(rolesSrc).not.toMatch(/provider\.apply_open_job/);
+      expect(rolesSrc).not.toMatch(/provider\.withdraw/);
+      expect(rolesSrc).not.toMatch(/provider\.publish_deliverable/);
+      expect(rolesSrc).not.toMatch(/erc8183\.provider_run_job/);
+      expect(rolesSrc).not.toMatch(/erc8183\.provider_run_and_submit/);
+      expect(rolesSrc).not.toMatch(/erc8183\.provider_submit_deliverable/);
+      expect(rolesSrc).not.toMatch(/erc8183\.set_budget/);
+      expect(rolesSrc).not.toMatch(/jobs\.get_onchain_status/);
+      expect(rolesSrc).not.toMatch(/jobs\.get_lifecycle_summary/);
+      expect(toolsSrc).not.toMatch(/provider\.runtime_/);
+      expect(toolsSrc).not.toMatch(/provider\.list_/);
+      expect(toolsSrc).not.toMatch(/provider\.apply_open_job/);
+      expect(toolsSrc).not.toMatch(/provider\.withdraw/);
+      expect(toolsSrc).not.toMatch(/provider\.publish_deliverable/);
+    });
+
+    it("provider role has no raw MCP names in allowedTools", () => {
+      const tools = getArcLayerToolsForRole("provider", {
+        enableProviderRunAndSubmit: true,
+        enableProviderSetBudget: true,
+        enableProviderPublishDeliverable: true,
+        enableProviderSubmitDeliverable: true,
+      });
+      for (const t of tools) {
+        expect(t).toMatch(/^arclayer_/);
+        expect(t).not.toMatch(/\./);
       }
     });
   });
