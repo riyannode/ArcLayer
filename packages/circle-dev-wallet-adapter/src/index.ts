@@ -451,11 +451,11 @@ export class CircleDevWalletAdapter implements WalletExecutionAdapter {
       throw new RunnerError("ERC8183_SIGNATURE_BLOCKED",
         `Signature "${input.signature}" is not in the ERC-8183 lifecycle allowlist`, 403);
     }
-    // Pre-encode calldata — Circle SDK abiParameters does NOT support bytes/bytes32
-    const callData = encodeErc8183CallData(input.signature, input.params);
+    // callData path rejected by Circle API on ARC-TESTNET (code=2 "API parameter invalid")
+    // Try abiFunctionSignature + abiParameters instead (bytes params as hex string)
     return this.executeContractTransaction(
       input.contract, input.signature, input.params,
-      `erc8183.${input.signature.split("(")[0]}`, input.idempotencyKey, callData,
+      `erc8183.${input.signature.split("(")[0]}`, input.idempotencyKey,
     );
   }
 
@@ -512,17 +512,25 @@ export class CircleDevWalletAdapter implements WalletExecutionAdapter {
       // For ERC-8183 methods with bytes/bytes32 params, caller pre-encodes callData via viem.
       // Narrow cast: Circle SDK v10.6.0 types expose callData as a union branch.
       const txRequest = callData
-        ? { walletId: this.walletId, contractAddress, callData, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } }, idempotencyKey }
-        : { walletId: this.walletId, contractAddress, abiFunctionSignature, abiParameters, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } }, idempotencyKey };
+        ? { walletId: this.walletId, contractAddress, blockchain: this.chain, callData, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } }, idempotencyKey }
+        : { walletId: this.walletId, contractAddress, blockchain: this.chain, abiFunctionSignature, abiParameters, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } }, idempotencyKey };
 
       // Diagnostic: log call metadata (no secrets)
-      const diagParts = [`label=${label}`, `contract=${contractAddress.slice(0, 10)}...`, `params=${abiParameters.length}`];
-      if (callData) diagParts.push(`callData=${callData.length}chars`);
-      else diagParts.push(`sig=${abiFunctionSignature}`);
+      const diagParts = [`label=${label}`, `contract=${contractAddress}`, `blockchain=${this.chain}`, `params=${abiParameters.length}`];
+      if (callData) {
+        diagParts.push(`callData=${callData.length}chars`);
+        diagParts.push(`selector=${callData.slice(0, 10)}`);
+        diagParts.push(`hasAbiSig=${"abiFunctionSignature" in txRequest}`);
+        diagParts.push(`hasAbiParams=${"abiParameters" in txRequest}`);
+      } else {
+        diagParts.push(`sig=${abiFunctionSignature}`);
+      }
+      diagParts.push(`hasWalletId=${!!this.walletId}`);
+      diagParts.push(`hasBlockchain=${!!("blockchain" in txRequest)}`);
       process.stdout.write(`[circle-adapter] ${diagParts.join(" | ")}\n`);
 
       const resp = await client.createContractExecutionTransaction(
-        txRequest as Parameters<typeof client.createContractExecutionTransaction>[0],
+        txRequest as unknown as Parameters<typeof client.createContractExecutionTransaction>[0],
       );
 
       const transactionId = resp.data?.id as string | undefined;
@@ -540,7 +548,14 @@ export class CircleDevWalletAdapter implements WalletExecutionAdapter {
         ok: state === "COMPLETE",
         data: { id: transactionId, state, txHash },
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      // Sanitized error logging — no secrets
+      const errObj = error as Record<string, unknown>;
+      const respData = (errObj as any)?.response?.data ?? (errObj as any)?.error?.response?.data;
+      const respStatus = (errObj as any)?.response?.status ?? (errObj as any)?.error?.response?.status;
+      const errCode = respData?.code ?? respData?.errorCode;
+      const errMsg = respData?.message ?? respData?.error;
+      process.stderr.write(`[circle-adapter-debug] ${label} error: status=${respStatus} code=${errCode} message=${errMsg} callData=${callData ? "yes" : "no"} blockchain=${this.chain}\n`);
       throw new RunnerError("CIRCLE_API_ERROR", `${label} failed: ${sanitizeError(error)}`, 502);
     }
   }
