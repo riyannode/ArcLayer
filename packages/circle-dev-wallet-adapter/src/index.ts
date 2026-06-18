@@ -452,7 +452,7 @@ export class CircleDevWalletAdapter implements WalletExecutionAdapter {
         `Signature "${input.signature}" is not in the ERC-8183 lifecycle allowlist`, 403);
     }
     // Pre-encode calldata — Circle SDK abiParameters does NOT support bytes/bytes32
-    // Use callData path with walletAddress+blockchain (matches SDK Provider pattern)
+    // Pre-encode callData via viem; Circle SDK abiParameters does not support bytes/bytes32.
     const callData = encodeErc8183CallData(input.signature, input.params);
     return this.executeContractTransaction(
       input.contract, input.signature, input.params,
@@ -504,20 +504,17 @@ export class CircleDevWalletAdapter implements WalletExecutionAdapter {
     try {
       const client = this.getClient();
 
-      if (!idempotencyKey) {
-        throw new RunnerError("MISSING_IDEMPOTENCY_KEY",
-          `${label} requires gateway idempotencyKey`, 500);
-      }
+      // Runner-level idempotency handled by ExecutionGateway; not forwarded to Circle SDK.
 
       // Circle SDK callData is mutually exclusive with abiFunctionSignature + abiParameters.
       // For ERC-8183 methods with bytes/bytes32 params, caller pre-encodes callData via viem.
-      // Narrow cast: Circle SDK v10.6.0 types expose callData as a union branch.
-      // SDK Provider uses walletAddress+blockchain for callData path.
-      // walletId path works for abiFunctionSignature (register confirmed).
-      // Try walletAddress+blockchain for callData (ERC-8183 bytes methods).
+      // Minimal shape: {walletId, contractAddress, callData, fee}. No blockchain, no idempotencyKey.
+      // Circle API rejects non-UUID idempotencyKey (code=2). SDK auto-generates UUID.
+      // Runner-level idempotency handled by ExecutionGateway.
+      
       const txRequest = callData
-        ? { walletAddress: this.walletAddress, blockchain: this.chain, contractAddress, callData, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } }, idempotencyKey }
-        : { walletId: this.walletId, contractAddress, abiFunctionSignature, abiParameters, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } }, idempotencyKey };
+        ? { walletId: this.walletId, contractAddress, callData, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } } }
+        : { walletId: this.walletId, contractAddress, abiFunctionSignature, abiParameters, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } } };
 
       // Diagnostic: log call metadata (no secrets)
       const diagParts = [`label=${label}`, `contract=${contractAddress}`, `blockchain=${this.chain}`, `params=${abiParameters.length}`];
