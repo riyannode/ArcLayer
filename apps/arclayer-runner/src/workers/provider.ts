@@ -12,11 +12,11 @@
  *   - Runtime failure never submits a deliverable
  *   - needs_action: checkpoint, stop job, alert, do NOT submit
  *   - Reuses existing RunnerServices (runProviderJob, submitProviderDeliverable)
- *   - Reuses existing ExecutionGateway, OperationJournal, CircleCliAdapter
+ *   - Reuses existing ExecutionGateway, OperationJournal, wallet adapter
  *
  * CLI:
- *   arclayer-runner provider-worker
- *   arclayer-runner provider-worker --once
+ *   arclayer-runner provider
+ *   arclayer-runner provider --once
  */
 
 import { EventEmitter } from "node:events";
@@ -288,6 +288,9 @@ export class ProviderWorker extends EventEmitter {
       switch (op.kind) {
         case "setBudget": {
           // BudgetSet: onchain budget equals expected amount
+          // expectedValue from idempotencyKey is decimal (e.g. "1.00")
+          // onchainBudget is atomic (e.g. "1000000")
+          // Normalize both to atomic for comparison
           const onchainBudget = readBudgetAtomic();
           if (!onchainBudget || onchainBudget === "0") {
             return { outcome: "unknown", error: "Budget not set on-chain" };
@@ -295,8 +298,18 @@ export class ProviderWorker extends EventEmitter {
           if (!expectedValue) {
             return { outcome: "unknown", error: "Missing expected budget in idempotencyKey" };
           }
-          if (onchainBudget !== expectedValue) {
-            return { outcome: "failed", error: `Budget mismatch: expected ${expectedValue}, got ${onchainBudget}` };
+
+          // Convert expected decimal to atomic for comparison
+          let expectedAtomic: string;
+          try {
+            expectedAtomic = parseUsdcToAtomic(expectedValue).toString();
+          } catch {
+            // If expectedValue is already atomic (no decimal point), use as-is
+            expectedAtomic = expectedValue;
+          }
+
+          if (onchainBudget !== expectedAtomic) {
+            return { outcome: "failed", error: `Budget mismatch: expected ${expectedAtomic} (from ${expectedValue}), got ${onchainBudget}` };
           }
           // Verify provider still equals local wallet
           const onchainProvider = readProvider();
@@ -446,7 +459,7 @@ export class ProviderWorker extends EventEmitter {
       const budgetAtomic = parseUsdcToAtomic(proposedBudget).toString();
       const result = await this.services.setBudget({
         jobId: erc8183JobId,
-        amount: budgetAtomic,
+        amount: proposedBudget,
         optParams: "0x",
       });
 
