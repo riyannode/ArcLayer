@@ -437,8 +437,8 @@ async function main() {
               result?: unknown;
             }>;
           },
-          finalizeFn: async (txHash: string) => {
-            return services.finalizeIdentityRegistration(txHash);
+          finalizeFn: async (txHash: string, metadataURI?: string) => {
+            return services.finalizeIdentityRegistration(txHash, metadataURI);
           },
         });
 

@@ -283,9 +283,11 @@ describe("CLI command validation", () => {
 
   it("services.ts has finalizeIdentityRegistration method", () => {
     const source = readRelative("apps/arclayer-runner/src/services.ts");
-    expect(source).toContain("async finalizeIdentityRegistration(txHash: string)");
-    expect(source).toContain("totalSupply");
-    expect(source).toContain("ownerOf(uint256)");
+    expect(source).toContain("async finalizeIdentityRegistration(");
+    expect(source).toContain("getTransactionReceipt");
+    expect(source).toContain("decodeEventLog");
+    expect(source).toContain("Transfer");
+    expect(source).toContain("metadataURI");
   });
 });
 

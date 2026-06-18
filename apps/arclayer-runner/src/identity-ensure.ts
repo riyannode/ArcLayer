@@ -237,7 +237,7 @@ export type FinalizeResult = {
  * to a specific chain query mechanism.
  */
 export async function finalizePendingIdentity(params: {
-  finalizeFn: (txHash: string) => Promise<{
+  finalizeFn: (txHash: string, metadataURI?: string) => Promise<{
     status: "confirmed" | "still_pending" | "reverted" | "not_found";
     tokenId?: string;
   }>;
@@ -247,7 +247,7 @@ export async function finalizePendingIdentity(params: {
     return { action: "not_found", message: "No pending registration to finalize" };
   }
 
-  const result = await params.finalizeFn(registration.txHash);
+  const result = await params.finalizeFn(registration.txHash, registration.metadataURI);
 
   if (result.status === "confirmed" && result.tokenId) {
     // Write confirmed identity
@@ -304,7 +304,7 @@ export async function ensureIdentity(params: {
   walletAddress?: string;
   registerFn: (metadataURI: string, idempotencyKey: string) => Promise<{ ok: boolean; txHash?: string; result?: unknown }>;
   /** If provided, attempt to finalize pending registrations */
-  finalizeFn?: (txHash: string) => Promise<{
+  finalizeFn?: (txHash: string, metadataURI?: string) => Promise<{
     status: "confirmed" | "still_pending" | "reverted" | "not_found";
     tokenId?: string;
   }>;
