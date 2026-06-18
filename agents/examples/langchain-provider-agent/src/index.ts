@@ -5,13 +5,13 @@
  * External LLM API only — no local model.
  *
  * Default behavior:
- *   ENABLE_AUTO_SUBMIT=false — only arclayer_provider_run_only is available
+ *   ENABLE_AUTO_SUBMIT=false — only erc8183_provider_run_only is available
  *
  * Autonomous submit mode:
- *   ENABLE_AUTO_SUBMIT=true — arclayer_provider_run_and_submit becomes available
+ *   ENABLE_AUTO_SUBMIT=true — erc8183_provider_run_and_submit becomes available
  *
  * Provider pricing mode:
- *   ENABLE_PROVIDER_SET_BUDGET=true — arclayer_provider_quote_job + arclayer_provider_set_budget become available
+ *   ENABLE_PROVIDER_SET_BUDGET=true — erc8183_provider_quote_job + erc8183_provider_set_budget become available
  *   Provider quotes complexity, sets budget (max 5 USDC), then runs job.
  *
  * Memory mode (opt-in, disabled by default):
@@ -38,6 +38,7 @@
  */
 
 import { createArcLayerLangChainAgent } from "@arclayer/langchain-adapter";
+import { ChatOpenAI } from "@langchain/openai";
 import { MemorySaver } from "@langchain/langgraph";
 
 // ── Config ──────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ import { MemorySaver } from "@langchain/langgraph";
 const RUNNER_URL = process.env.ARCLAYER_RUNNER_URL ?? "http://127.0.0.1:8787";
 const RUNNER_SECRET = process.env.ARCLAYER_RUNNER_SECRET;
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "openai:gpt-4o";
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "";
 const ENABLE_AUTO_SUBMIT = process.env.ENABLE_AUTO_SUBMIT === "true";
 const ENABLE_PROVIDER_SET_BUDGET = process.env.ENABLE_PROVIDER_SET_BUDGET === "true";
 // Memory is disabled by default. When enabled, LangGraph may checkpoint
@@ -90,9 +92,20 @@ const providerPricingPolicy = ENABLE_PROVIDER_SET_BUDGET
 
 // ── Agent Setup ─────────────────────────────────────────────────────────
 
+// Create model — supports custom base URL (e.g. MiMo)
+const modelForAgent = OPENAI_BASE_URL
+  ? new ChatOpenAI({
+      model: OPENAI_MODEL.replace(/^openai:/, ""),
+      apiKey: process.env.OPENAI_API_KEY ?? "",
+      configuration: { baseURL: OPENAI_BASE_URL },
+      temperature: 0.2,
+      maxTokens: 4096,
+    })
+  : OPENAI_MODEL;
+
 const agent = createArcLayerLangChainAgent({
   role: "provider",
-  model: OPENAI_MODEL,
+  model: modelForAgent,
   runnerUrl: RUNNER_URL,
   runnerSecret: RUNNER_SECRET,
   enableProviderRunAndSubmit: ENABLE_AUTO_SUBMIT,
@@ -162,20 +175,20 @@ function buildProviderPrompt(job: unknown): string {
       "You are an ArcLayer ERC-8183 provider agent with pricing capability.",
       "",
       "Pricing workflow:",
-      "1. Use arclayer_provider_quote_job to assess job complexity (low/medium/high).",
+      "1. Use erc8183_provider_quote_job to assess job complexity (low/medium/high).",
       "2. Choose budget from complexity mapping: low=1 USDC, medium=3 USDC, high=5 USDC.",
       "3. Never request more than 5 USDC.",
-      "4. Call arclayer_provider_set_budget with the jobId, amount, complexity, and a pricing reason.",
+      "4. Call erc8183_provider_set_budget with the jobId, amount, complexity, and a pricing reason.",
       "5. The reason will be encoded into on-chain calldata — do not include secrets.",
     ];
 
     if (ENABLE_AUTO_SUBMIT) {
       parts.push(
-        "6. After budget is set, call arclayer_provider_run_and_submit.",
+        "6. After budget is set, call erc8183_provider_run_and_submit.",
       );
     } else {
       parts.push(
-        "6. After budget is set, call arclayer_provider_run_only.",
+        "6. After budget is set, call erc8183_provider_run_only.",
       );
     }
 
@@ -194,7 +207,7 @@ function buildProviderPrompt(job: unknown): string {
   if (ENABLE_AUTO_SUBMIT) {
     return [
       "You are an ArcLayer ERC-8183 provider agent.",
-      "Use arclayer_provider_run_and_submit only for the exact provider job below.",
+      "Use erc8183_provider_run_and_submit only for the exact provider job below.",
       "Do not create, fund, complete, or reject jobs.",
       "Do not invent job IDs, agent IDs, wallet addresses, receipts, or tx hashes.",
       "Provider job JSON:",
@@ -204,7 +217,7 @@ function buildProviderPrompt(job: unknown): string {
 
   return [
     "You are an ArcLayer ERC-8183 provider agent.",
-    "Use arclayer_provider_run_only for the exact provider job below.",
+    "Use erc8183_provider_run_only for the exact provider job below.",
     "Do not submit on-chain.",
     "Do not create, fund, complete, or reject jobs.",
     "Do not invent job IDs, agent IDs, wallet addresses, receipts, or tx hashes.",
@@ -231,12 +244,12 @@ async function processTask(job: unknown): Promise<void> {
 // ── Worker Loop ─────────────────────────────────────────────────────────
 
 async function workerLoop(): Promise<void> {
-  const availableTools = ["arclayer_provider_run_only", "arclayer_provider_quote_job"];
+  const availableTools = ["erc8183_provider_run_only", "erc8183_provider_quote_job"];
   if (ENABLE_AUTO_SUBMIT) {
-    availableTools.push("arclayer_provider_run_and_submit");
+    availableTools.push("erc8183_provider_run_and_submit");
   }
   if (ENABLE_PROVIDER_SET_BUDGET) {
-    availableTools.push("arclayer_provider_set_budget");
+    availableTools.push("erc8183_provider_set_budget");
   }
 
   console.log("[provider-agent] started");
