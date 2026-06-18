@@ -12,11 +12,11 @@
  *   - Runtime failure never submits a deliverable
  *   - needs_action: checkpoint, stop job, alert, do NOT submit
  *   - Reuses existing RunnerServices (runProviderJob, submitProviderDeliverable)
- *   - Reuses existing ExecutionGateway, OperationJournal, CircleCliAdapter
+ *   - Reuses existing ExecutionGateway, OperationJournal, wallet adapter
  *
  * CLI:
- *   arclayer-runner provider-worker
- *   arclayer-runner provider-worker --once
+ *   arclayer-runner provider
+ *   arclayer-runner provider --once
  */
 
 import { EventEmitter } from "node:events";
@@ -446,7 +446,7 @@ export class ProviderWorker extends EventEmitter {
       const budgetAtomic = parseUsdcToAtomic(proposedBudget).toString();
       const result = await this.services.setBudget({
         jobId: erc8183JobId,
-        amount: budgetAtomic,
+        amount: proposedBudget,
         optParams: "0x",
       });
 

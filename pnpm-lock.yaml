@@ -56,6 +56,34 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  agents/examples/langchain-runtime-server:
+    dependencies:
+      '@arclayer/runner-core':
+        specifier: workspace:^
+        version: link:../../../packages/runner-core
+      '@langchain/core':
+        specifier: ^1.0.0
+        version: 1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
+      '@langchain/openai':
+        specifier: ^1.0.0
+        version: 1.4.7(@langchain/core@1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
+      langchain:
+        specifier: ^1.0.0
+        version: 1.4.5(@langchain/core@1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)))(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.2(zod@3.25.76))
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.19
+        version: 22.19.19
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@22.19.19)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   apps/arclayer-runner:
     dependencies:
       '@arclayer/circle-dev-wallet-adapter':
@@ -772,12 +800,6 @@ packages:
   '@langchain/core@1.1.49':
     resolution: {integrity: sha512-7wkN3Qv/qZqsY0p3h48CNu6E6y5GMYatYxj+JrX4uVNBiqIVQm1Z528QrmayJWVW9SQTQicqRNoyTCzl+K9F8Q==}
     engines: {node: '>=20'}
-
-  '@langchain/langgraph-checkpoint@1.1.1':
-    resolution: {integrity: sha512-gHqhO6e2dyZ7TTfyaFy25yjcRsavURc9XMGT4q+LUBTc0hT4JxKe3qvrMX2OFTzW8W/0kjV59haHmSRFZIGkvg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@langchain/core': ^1.1.48
 
   '@langchain/langgraph-checkpoint@1.1.2':
     resolution: {integrity: sha512-m5Xd7W3G9JrlEhFZ5WAcqZPgE46R9gr1gFDFaVqEKeuwin3tgEp0jlPbru+iFXCug338DcQjFS/Kuuci21ydvw==}
@@ -5077,10 +5099,6 @@ snapshots:
       - openai
       - ws
 
-  '@langchain/langgraph-checkpoint@1.1.1(@langchain/core@1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)))':
-    dependencies:
-      '@langchain/core': 1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
-
   '@langchain/langgraph-checkpoint@1.1.2(@langchain/core@1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)))':
     dependencies:
       '@langchain/core': 1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
@@ -9342,7 +9360,7 @@ snapshots:
     dependencies:
       '@langchain/core': 1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
       '@langchain/langgraph': 1.4.4(@langchain/core@1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(zod-to-json-schema@3.25.2(zod@3.25.76))(zod@4.4.3)
-      '@langchain/langgraph-checkpoint': 1.1.1(@langchain/core@1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)))
+      '@langchain/langgraph-checkpoint': 1.1.2(@langchain/core@1.1.49(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)))
       langsmith: 0.7.10(openai@6.43.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76))(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
       zod: 4.4.3
     transitivePeerDependencies:
