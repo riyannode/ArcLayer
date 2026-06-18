@@ -68,13 +68,13 @@ export type CreateArcLayerLangChainToolsOptions = {
   allowedHosts?: string[];
   deniedHosts?: string[];
   requireIdempotencyKey?: boolean;
-  /** Explicit opt-in for arclayer_provider_run_and_submit (provider role only). Default: false. */
+  /** Explicit opt-in for erc8183_provider_run_and_submit (provider role only). Default: false. */
   enableProviderRunAndSubmit?: boolean;
-  /** Explicit opt-in for arclayer_provider_set_budget (provider role only). Default: false. */
+  /** Explicit opt-in for erc8183_provider_set_budget (provider role only). Default: false. */
   enableProviderSetBudget?: boolean;
-  /** Explicit opt-in for arclayer_provider_publish_deliverable (provider role only). Default: false. */
+  /** Explicit opt-in for erc8183_provider_publish_deliverable (provider role only). Default: false. */
   enableProviderPublishDeliverable?: boolean;
-  /** Explicit opt-in for arclayer_provider_submit_deliverable (provider role only). Default: false. */
+  /** Explicit opt-in for erc8183_provider_submit_deliverable (provider role only). Default: false. */
   enableProviderSubmitDeliverable?: boolean;
   /** Provider complexity-based pricing policy. Uses defaults if not set. */
   providerPricingPolicy?: ProviderPricingPolicy;
@@ -153,18 +153,18 @@ export type X402BatchPayInput = {
 /** Generic input for provider runtime proxy tools that take a JSON body. */
 export type ProviderProxyInput = Record<string, unknown>;
 
-/** Input for arclayer_provider_submit_deliverable. */
+/** Input for erc8183_provider_submit_deliverable. */
 export type ProviderSubmitDeliverableInput = {
   jobId: string;
   deliverableHash: string;
 };
 
-/** Input for arclayer_job_status. */
+/** Input for erc8183_job_status. */
 export type JobStatusInput = {
   jobId: string;
 };
 
-/** Input for arclayer_job_lifecycle_summary. */
+/** Input for erc8183_job_lifecycle_summary. */
 export type JobLifecycleSummaryInput = {
   jobId: string;
 };
@@ -172,7 +172,7 @@ export type JobLifecycleSummaryInput = {
 // ── Provider Runtime Schemas (input shapes for ERC-8183 tools) ──────────────
 
 /**
- * Input for arclayer_provider_run_only.
+ * Input for erc8183_provider_run_only.
  * Matches Runner HTTP body shape (Erc8183ProviderJobSchema superset).
  * Runner parses body as Erc8183ProviderJobSchema which includes
  * evaluator? and metadata? beyond the MCP input schema.
@@ -189,7 +189,7 @@ export type ProviderRunOnlyInput = {
 };
 
 /**
- * Input for arclayer_provider_run_and_submit.
+ * Input for erc8183_provider_run_and_submit.
  * Same shape as ProviderRunOnlyInput — the Runner handles the submit step.
  */
 export type ProviderRunAndSubmitInput = ProviderRunOnlyInput;
@@ -218,7 +218,7 @@ export type ProviderRunAndSubmitOutput = ProviderRunOnlyOutput & {
 // ── Provider Pricing Schemas ────────────────────────────────────────────────
 
 /**
- * Input for arclayer_provider_quote_job (adapter-only).
+ * Input for erc8183_provider_quote_job (adapter-only).
  * Estimates complexity and suggests a budget without making any on-chain calls.
  */
 export type ProviderQuoteJobInput = {
@@ -230,7 +230,7 @@ export type ProviderQuoteJobInput = {
 };
 
 /**
- * Output from arclayer_provider_quote_job.
+ * Output from erc8183_provider_quote_job.
  */
 export type ProviderQuoteJobOutput = {
   ok: true;
@@ -242,7 +242,7 @@ export type ProviderQuoteJobOutput = {
 };
 
 /**
- * Input for arclayer_provider_set_budget.
+ * Input for erc8183_provider_set_budget.
  * Sends a setBudget transaction through Runner with reason encoded into optParams.
  */
 export type ProviderSetBudgetInput = {
@@ -253,7 +253,7 @@ export type ProviderSetBudgetInput = {
 };
 
 /**
- * Output from arclayer_provider_set_budget.
+ * Output from erc8183_provider_set_budget.
  */
 export type ProviderSetBudgetOutput = {
   ok: boolean;

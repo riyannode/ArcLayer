@@ -25,45 +25,45 @@ type RoleToolOverrides = {
   enableProviderSubmitDeliverable?: boolean;
 };
 
-const PROVIDER_RUN_AND_SUBMIT_TOOL = "arclayer_provider_run_and_submit";
-const PROVIDER_QUOTE_JOB_TOOL = "arclayer_provider_quote_job";
-const PROVIDER_SET_BUDGET_TOOL = "arclayer_provider_set_budget";
-const PROVIDER_SUBMIT_DELIVERABLE_TOOL = "arclayer_provider_submit_deliverable";
+const PROVIDER_RUN_AND_SUBMIT_TOOL = "erc8183_provider_run_and_submit";
+const PROVIDER_QUOTE_JOB_TOOL = "erc8183_provider_quote_job";
+const PROVIDER_SET_BUDGET_TOOL = "erc8183_provider_set_budget";
+const PROVIDER_SUBMIT_DELIVERABLE_TOOL = "erc8183_provider_submit_deliverable";
 
 /** All provider runtime proxy tools (read + write). */
 const PROVIDER_RUNTIME_TOOLS = [
-  "arclayer_provider_get_context",
-  "arclayer_provider_get_resume_plan",
-  "arclayer_provider_heartbeat",
-  "arclayer_provider_start_job",
-  "arclayer_provider_write_checkpoint",
-  "arclayer_provider_retry_job",
-  "arclayer_provider_complete_run",
+  "erc8183_provider_get_context",
+  "erc8183_provider_get_resume_plan",
+  "erc8183_provider_heartbeat",
+  "erc8183_provider_start_job",
+  "erc8183_provider_write_checkpoint",
+  "erc8183_provider_retry_job",
+  "erc8183_provider_complete_run",
 ];
 
 /** All provider marketplace tools (read + apply/withdraw). */
 const PROVIDER_MARKETPLACE_TOOLS = [
-  "arclayer_provider_list_assigned_jobs",
-  "arclayer_provider_list_assigned_jobs_extended",
-  "arclayer_provider_list_open_jobs",
-  "arclayer_provider_list_my_open_job_applications",
-  "arclayer_provider_apply_open_job",
-  "arclayer_provider_withdraw_open_job_application",
+  "erc8183_provider_list_assigned_jobs",
+  "erc8183_provider_list_assigned_jobs_extended",
+  "erc8183_provider_list_open_jobs",
+  "erc8183_provider_list_my_open_job_applications",
+  "erc8183_provider_apply_open_job",
+  "erc8183_provider_withdraw_open_job_application",
 ];
 
 /** Provider deliverable + on-chain write tools (opt-in). */
 const PROVIDER_ONCHAIN_WRITE_TOOLS = [
-  "arclayer_provider_publish_deliverable",
-  "arclayer_provider_submit_deliverable",
+  "erc8183_provider_publish_deliverable",
+  "erc8183_provider_submit_deliverable",
 ];
 
 /** Shared read tools available to all roles. */
 const SHARED_READ_TOOLS = [
-  "arclayer_x402_inspect",
-  "arclayer_receipts",
-  "arclayer_spend_ledger",
-  "arclayer_job_status",
-  "arclayer_job_lifecycle_summary",
+  "x402_inspect",
+  "payment_receipts",
+  "payment_spend_ledger",
+  "erc8183_job_status",
+  "erc8183_job_lifecycle_summary",
 ];
 
 const ROLE_PRESETS: RolePreset[] = [
@@ -84,8 +84,8 @@ const ROLE_PRESETS: RolePreset[] = [
       "Can inspect, pay, batch pay x402 resources, read receipts, ledger, job status, and lifecycle.",
     allowedTools: [
       ...SHARED_READ_TOOLS,
-      "arclayer_x402_pay",
-      "arclayer_x402_batch_pay",
+      "x402_pay",
+      "x402_batch_pay",
     ],
     runnerRole: "x402-agent",
   },
@@ -99,8 +99,8 @@ const ROLE_PRESETS: RolePreset[] = [
       ...SHARED_READ_TOOLS,
       ...PROVIDER_RUNTIME_TOOLS,
       ...PROVIDER_MARKETPLACE_TOOLS,
-      "arclayer_provider_run_only",
-      "arclayer_provider_quote_job",
+      "erc8183_provider_run_only",
+      "erc8183_provider_quote_job",
     ],
     runnerRole: "provider",
   },
@@ -156,7 +156,7 @@ export function getArcLayerToolsForRole(
 
   // Explicit opt-in: add publish-deliverable only for provider role when enabled
   if (role === "provider" && overrides?.enableProviderPublishDeliverable) {
-    tools.push("arclayer_provider_publish_deliverable");
+    tools.push("erc8183_provider_publish_deliverable");
   }
 
   // Explicit opt-in: add submit-deliverable only for provider role when enabled
