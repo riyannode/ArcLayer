@@ -169,6 +169,31 @@ const ProviderSetBudgetInputSchema = z.object({
 /** Generic schema for provider runtime proxy tools that accept a JSON body. */
 const ProviderProxyInputSchema = z.object({}).passthrough().describe("Tool-specific input (passed through to Console MCP)");
 
+/** Schema for erc8183_provider_write_checkpoint — Console MCP requires agentId, jobId, phase, status. */
+const ProviderWriteCheckpointInputSchema = z.object({
+  agentId: z.string().min(1).describe("Agent identifier"),
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID"),
+  phase: z.string().min(1).describe("Checkpoint phase (e.g. 'executing', 'deliverable_ready')"),
+  status: z.string().min(1).describe("Checkpoint status (e.g. 'in_progress', 'completed')"),
+  runId: z.string().optional().describe("Optional run ID"),
+  txHash: z.string().optional().describe("Optional transaction hash"),
+  deliverableHash: z.string().optional().describe("Optional deliverable hash"),
+  payloadHash: z.string().optional().describe("Optional payload hash"),
+  note: z.string().optional().describe("Optional human-readable note"),
+  metadata: z.record(z.string(), z.unknown()).optional().describe("Optional metadata"),
+});
+
+/** Schema for erc8183_provider_publish_deliverable — Console MCP requires agentId, jobId, providerAddress, canonicalPayload, deliverableHash. */
+const ProviderPublishDeliverableInputSchema = z.object({
+  agentId: z.string().min(1).describe("Agent identifier"),
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID"),
+  providerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Must be a valid 0x address").describe("Provider wallet address"),
+  canonicalPayload: z.string().min(1).describe("Canonical deliverable payload (server recomputes Keccak-256)"),
+  deliverableHash: z.string().min(1).describe("Expected Keccak-256 hash of canonicalPayload (0x-prefixed, 66 chars)"),
+  artifacts: z.array(z.unknown()).optional().describe("Optional artifacts array"),
+  runtimeReceiptHash: z.string().optional().describe("Optional runtime receipt hash"),
+});
+
 /** Schema for erc8183_provider_submit_deliverable. */
 const ProviderSubmitDeliverableInputSchema = z.object({
   jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID (numeric string)"),
@@ -473,7 +498,6 @@ export function createArcLayerLangChainTools(
       case "erc8183_provider_get_resume_plan":
       case "erc8183_provider_heartbeat":
       case "erc8183_provider_start_job":
-      case "erc8183_provider_write_checkpoint":
       case "erc8183_provider_retry_job":
       case "erc8183_provider_complete_run":
       case "erc8183_provider_list_assigned_jobs":
@@ -482,8 +506,15 @@ export function createArcLayerLangChainTools(
       case "erc8183_provider_list_my_open_job_applications":
       case "erc8183_provider_apply_open_job":
       case "erc8183_provider_withdraw_open_job_application":
-      case "erc8183_provider_publish_deliverable":
         tools.push(createProviderProxyTool(client, toolName, entry, { logger }));
+        break;
+
+      case "erc8183_provider_write_checkpoint":
+        tools.push(createProviderWriteCheckpointTool(client, toolName, entry, { logger }));
+        break;
+
+      case "erc8183_provider_publish_deliverable":
+        tools.push(createProviderPublishDeliverableTool(client, toolName, entry, { logger }));
         break;
 
       case "erc8183_provider_submit_deliverable":
@@ -936,47 +967,40 @@ function createProviderSetBudgetTool(
 const PROVIDER_PROXY_DESCRIPTIONS: Record<string, string> = {
   erc8183_provider_get_context:
     "Get provider runtime context: state, active run, checkpoint, applications, and resume plan. " +
-    "Read-only. Pass an empty object or provider-specific filters.",
+    "Pass { agentId }.",
   erc8183_provider_get_resume_plan:
     "Get the resume plan for a provider run — computes the next action from checkpoint and on-chain state. " +
-    "Pass an empty object or { runId, jobId } to scope the plan.",
+    "Pass { agentId, runId?, jobId? }.",
   erc8183_provider_heartbeat:
     "Send a provider heartbeat — updates last_seen_at for the provider agent. " +
-    "Call periodically to signal liveness.",
+    "Pass { agentId }.",
   erc8183_provider_start_job:
     "Start a provider job run — creates a durable runtime entry for the job. " +
     "Idempotent on (agentId, jobId). Pass { agentId, jobId, taskId, ... }.",
-  erc8183_provider_write_checkpoint:
-    "Write a provider runtime checkpoint — append-only progress record for a running job. " +
-    "Pass { runId, phase, data } to record current state.",
   erc8183_provider_retry_job:
     "Retry a failed provider job run — max 3 retries. " +
-    "Phase must be 'runtime_failed' or 'submit_tx_failed'. Pass { runId, jobId, agentId }.",
+    "Phase must be 'runtime_failed' or 'submit_tx_failed'. Pass { agentId, jobId }.",
   erc8183_provider_complete_run:
     "Mark a provider runtime run as completed — terminal cleanup. " +
-    "Pass { runId, jobId, agentId, status }.",
+    "Pass { agentId, jobId, runId?, status }.",
   erc8183_provider_list_assigned_jobs:
     "List jobs assigned to the provider address. " +
-    "Pass { provider } (0x address) to filter.",
+    "Pass { agentId, providerAddress, limit? }.",
   erc8183_provider_list_assigned_jobs_extended:
     "List assigned jobs with extended status filtering (Open/Funded/Submitted). " +
-    "Pass { provider, status } to filter by status.",
+    "Pass { agentId, providerAddress, status?, limit? }.",
   erc8183_provider_list_open_jobs:
     "List open/global jobs where provider = address(0). " +
-    "These are jobs any provider can apply for.",
+    "Pass { agentId, limit?, minBudgetUsdc?, includeExpired? }.",
   erc8183_provider_list_my_open_job_applications:
     "List the provider's open job applications. " +
-    "Pass { provider } (0x address) to see which jobs the provider has applied to.",
+    "Pass { agentId, status? }.",
   erc8183_provider_apply_open_job:
     "Apply for an open/global job as a provider. " +
-    "Pass { jobId, provider } to submit an application.",
+    "Pass { agentId, jobId, providerAddress, quoteAmountUsdc?, quoteAmountAtomic?, message?, capabilities?, metadata? }.",
   erc8183_provider_withdraw_open_job_application:
     "Withdraw an open job application. " +
-    "Pass { jobId, provider } to withdraw.",
-  erc8183_provider_publish_deliverable:
-    "Publish the canonical deliverable for a funded job. " +
-    "Server recomputes Keccak-256 hash and verifies on-chain provider/status. " +
-    "Pass { jobId, deliverableHash, content }.",
+    "Pass { agentId, jobId }.",
 };
 
 /**
@@ -1008,6 +1032,75 @@ function createProviderProxyTool(
       name: toolName,
       description,
       schema: ProviderProxyInputSchema,
+    },
+  );
+}
+
+/**
+ * Create the provider write checkpoint tool (dedicated schema).
+ * Calls Runner POST /provider/write-checkpoint (proxied to Console MCP).
+ */
+function createProviderWriteCheckpointTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.post(entry.runnerPath, input);
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Write a provider runtime checkpoint — append-only progress record for a running job. " +
+        "Required: { agentId, jobId, phase, status }. " +
+        "Optional: { runId, txHash, deliverableHash, payloadHash, note, metadata }. " +
+        "Idempotent on provider:<agentId>:job:<jobId>:checkpoint:<phase>.",
+      schema: ProviderWriteCheckpointInputSchema,
+    },
+  );
+}
+
+/**
+ * Create the provider publish deliverable tool (dedicated schema).
+ * Calls Runner POST /provider/publish-deliverable (proxied to Console MCP).
+ */
+function createProviderPublishDeliverableTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.post(entry.runnerPath, input);
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Publish the canonical deliverable for a funded job. " +
+        "Server recomputes Keccak-256 hash from canonicalPayload and verifies on-chain provider/status. " +
+        "Required: { agentId, jobId, providerAddress, canonicalPayload, deliverableHash }. " +
+        "Optional: { artifacts, runtimeReceiptHash }. " +
+        "Idempotent — provider can re-publish until submit locks it.",
+      schema: ProviderPublishDeliverableInputSchema,
     },
   );
 }

@@ -325,5 +325,34 @@ describe("roles", () => {
         expect(t).not.toMatch(/\./);
       }
     });
+
+    it("every proxied tool mcpName is in Runner CONSOLE_MCP_PROXY_TOOLS", async () => {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      // Read tool-map to find proxy entries (runnerPath starts with /provider/ or /jobs/)
+      const toolMapSrc = fs.readFileSync(
+        path.resolve(import.meta.dirname, "../tool-map.ts"), "utf8"
+      );
+      // Read tool-registry to get CONSOLE_MCP_PROXY_TOOLS names
+      const registrySrc = fs.readFileSync(
+        path.resolve(import.meta.dirname, "../../../../apps/arclayer-runner/src/tool-registry.ts"), "utf8"
+      );
+      // Extract mcpName values from tool-map for proxy routes
+      const mcpNameRegex = /mcpName:\s*"([^"]+)"/g;
+      const proxyPathRegex = /runnerPath:\s*"\/(provider|jobs)\//;
+      // Parse tool-map entries
+      const entries = toolMapSrc.split(/(?=\s+erc8183_|x402_|payment_)/).filter(Boolean);
+      for (const entry of entries) {
+        const pathMatch = entry.match(/runnerPath:\s*"([^"]+)"/);
+        const mcpMatch = entry.match(/mcpName:\s*"([^"]+)"/);
+        if (!pathMatch || !mcpMatch) continue;
+        const runnerPath = pathMatch[1];
+        const mcpName = mcpMatch[1];
+        // Only check proxy routes (not /x402/, /erc8183/, /receipts, /ledger which are runner-local)
+        if (runnerPath.startsWith("/provider/") || runnerPath.startsWith("/jobs/")) {
+          expect(registrySrc).toContain(`name: "${mcpName}"`);
+        }
+      }
+    });
   });
 });

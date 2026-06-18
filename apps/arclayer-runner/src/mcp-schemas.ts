@@ -729,6 +729,41 @@ export const CONSOLE_PROXY_MCP_TOOLS: McpToolDef[] = [
       metadata: { type: "object", description: "Additional metadata." },
     },
   },
+  {
+    name: "provider.list_assigned_jobs_extended",
+    description: "List assigned jobs with status filter (Open/Funded/Submitted).",
+    inputSchema: {
+      providerAddress: { type: "string", required: true, description: "Provider wallet address." },
+      status: { type: "string", description: "Status filter: Open, Funded, or Submitted (default Open)." },
+      limit: { type: "number", description: "Max results (1-100, default 20)." },
+    },
+  },
+  {
+    name: "provider.list_my_open_job_applications",
+    description: "List provider's open job applications.",
+    inputSchema: {
+      status: { type: "string", description: "Optional status filter." },
+    },
+  },
+  {
+    name: "provider.withdraw_open_job_application",
+    description: "Withdraw an open job application.",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "ERC-8183 job ID." },
+    },
+  },
+  {
+    name: "provider.publish_deliverable",
+    description: "Publish canonical deliverable for a funded job. Server recomputes Keccak-256 hash.",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "ERC-8183 job ID." },
+      providerAddress: { type: "string", required: true, description: "Provider wallet address." },
+      canonicalPayload: { type: "string", required: true, description: "Canonical deliverable payload." },
+      deliverableHash: { type: "string", required: true, description: "Expected Keccak-256 hash (0x-prefixed, 66 chars)." },
+      artifacts: { type: "array", description: "Optional artifacts array." },
+      runtimeReceiptHash: { type: "string", description: "Optional runtime receipt hash." },
+    },
+  },
 
   // ── Evaluator (tx prepare) ────────────────────────────────────────────
   {
