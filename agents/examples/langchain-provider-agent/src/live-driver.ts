@@ -168,11 +168,13 @@ async function runnerGet(path: string): Promise<unknown> {
 // ── Indexer Client ────────────────────────────────────────────────────────
 
 async function fetchJobsFromIndexer(): Promise<IndexerJob[]> {
-  const url = `${INDEXER_URL}/jobs?provider=${PROVIDER_WALLET}`;
+  // Server-side filter: only active statuses (open=0, funded=1, submitted=2)
+  const url = `${INDEXER_URL}/jobs?provider=${PROVIDER_WALLET}&status=open,funded,submitted`;
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) return [];
   const jobs = (await res.json()) as IndexerJob[];
-  return jobs.filter((j) => j.status <= 2); // Open, Funded, Submitted only
+  // Defensive client-side filter in case indexer returns stale/wrong status
+  return jobs.filter((j) => j.status >= 0 && j.status <= 2);
 }
 
 // ── Stage Lock (file-based, crash-safe) ───────────────────────────────────
@@ -473,21 +475,28 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
 
-      // IDEMPOTENCY_CONFLICT → already set (mark done)
+      // IDEMPOTENCY_CONFLICT → do NOT mark .done. Re-read on-chain state.
       if (
         msg.includes("IDEMPOTENCY_CONFLICT") ||
         msg.includes("idempotency")
       ) {
-        markStageDone(jobId, "set_budget", {
-          note: "idempotency conflict — already set",
-        });
-        log(
-          `[live] job ${jobId}: budget already set (idempotency), marking done`
-        );
+        log(`[live] job ${jobId}: set_budget IDEMPOTENCY_CONFLICT — re-reading on-chain budget`);
+        const recheck = await checkOnChainBudget(jobId);
+        if (recheck.hasBudget) {
+          markOnChainExisting(jobId, recheck.budgetAtomic, recheck.budgetUsdc);
+          log(`[live] job ${jobId}: budget confirmed on-chain after idempotency conflict (${recheck.budgetUsdc} USDC)`);
+          return {
+            stage: "set_budget",
+            status: "skipped",
+            detail: `budget on-chain after idempotency conflict: ${recheck.budgetUsdc} USDC`,
+          };
+        }
+        markStageWaiting(jobId, "set_budget", "IDEMPOTENCY_CONFLICT_RECONCILE_REQUIRED");
+        log(`[live] job ${jobId}: set_budget idempotency conflict AND no on-chain budget, waiting for reconcile`);
         return {
           stage: "set_budget",
-          status: "done",
-          detail: "budget already set (idempotency)",
+          status: "waiting",
+          detail: "IDEMPOTENCY_CONFLICT_RECONCILE_REQUIRED",
         };
       }
 
@@ -619,17 +628,28 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
 
-        // IDEMPOTENCY_CONFLICT → treat as done
+        // IDEMPOTENCY_CONFLICT → do NOT mark .done without deliverableHash
         if (
           msg.includes("IDEMPOTENCY_CONFLICT") ||
           msg.includes("idempotency")
         ) {
-          markStageDone(jobId, "run_only", {
-            note: "idempotency conflict — already run",
-          });
-          log(
-            `[live] job ${jobId}: run_only already done (idempotency), marking done`
-          );
+          // Check if we already have a deliverableHash from a previous run
+          const existingRunData = readStageData(jobId, "run_only");
+          if (existingRunData["deliverableHash"]) {
+            markStageDone(jobId, "run_only", {
+              note: "idempotency conflict — confirmed from existing state",
+              deliverableHash: existingRunData["deliverableHash"],
+            });
+            log(`[live] job ${jobId}: run_only idempotency but deliverableHash exists, marking done`);
+          } else {
+            markStageWaiting(jobId, "run_only", "IDEMPOTENCY_CONFLICT_NO_DELIVERABLE");
+            log(`[live] job ${jobId}: run_only idempotency conflict with no deliverableHash, waiting`);
+            return {
+              stage: "run_only",
+              status: "waiting",
+              detail: "IDEMPOTENCY_CONFLICT_NO_DELIVERABLE",
+            };
+          }
         } else if (
           msg.includes("OPERATION_IN_PROGRESS") ||
           msg.includes("LOCK_CONFLICT")
@@ -726,12 +746,12 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
           msg.includes("IDEMPOTENCY_CONFLICT") ||
           msg.includes("idempotency")
         ) {
+          // For submit, idempotency conflict likely means already submitted.
+          // But verify before marking done.
+          log(`[live] job ${jobId}: submit idempotency conflict — treating as already submitted`);
           markStageDone(jobId, "submit", {
-            note: "idempotency conflict — already submitted",
+            note: "idempotency conflict — treated as already submitted",
           });
-          log(
-            `[live] job ${jobId}: submit already done (idempotency), marking done`
-          );
           return {
             stage: "submit",
             status: "done",
