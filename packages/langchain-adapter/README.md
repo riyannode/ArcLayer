@@ -60,7 +60,7 @@ Evaluator and client roles will gain ERC-8183 tools in future PRs.
 Provider agents can run ERC-8183 jobs through ArcLayer Runner. Two tools are available:
 
 - **`arclayer_provider_run_only`** (default) — runs the job on the LLM runtime, returns `deliverableHash`. Does NOT submit on-chain. Use this as the default execution path.
-- **`arclayer_provider_run_and_submit`** (explicit opt-in) — runs the job AND submits the deliverable on-chain via Circle CLI. Requires `enableProviderRunAndSubmit: true`.
+- **`arclayer_provider_run_and_submit`** (explicit opt-in) — runs the job AND submits the deliverable on-chain via wallet adapter through ArcLayer Runner. Requires `enableProviderRunAndSubmit: true`.
 
 **Do NOT use `/erc8183/provider/run`** — it is a backward-compatible wrapper that delegates to `runAndSubmit`. Always use `run-only` or `run-and-submit` explicitly.
 
@@ -154,7 +154,7 @@ pm2 logs arclayer-langchain-agent
 ## What NOT To Do
 
 - Don't import `@arclayer/runner/src/*` from this package
-- Don't call Circle CLI directly from LangChain tools
+- Don't call wallet tooling directly from LangChain tools
 - Don't execute shell commands from LangChain tools
 - Don't expose Runner secrets to model context
 - Don't fake payment success, receipts, or tx hashes

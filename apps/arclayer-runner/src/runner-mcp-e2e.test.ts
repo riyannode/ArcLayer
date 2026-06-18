@@ -26,7 +26,6 @@ function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
     defaultRole: "provider",
     allowedRoles: ["provider"],
     chain: "ARC-TESTNET",
-    circleCliBin: "circle",
     circleWalletAddress: "0x0000000000000000000000000000000000000002",
     walletRail: "circle-dev" as const,
     circleApiKey: "test-api-key",

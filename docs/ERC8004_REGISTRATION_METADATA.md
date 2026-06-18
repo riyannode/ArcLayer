@@ -55,7 +55,7 @@ Note: No whitespace. Keys in insertion order. This is what gets keccak256-hashed
 2. Server validates metadata via `validateMetadata()`
 3. Server builds canonical JSON via `buildMetadataURI()`
 4. Server returns unsigned calldata for `IdentityRegistry.register(metadataURI)`
-5. Client signs and submits via Circle CLI or wallet
+5. Client signs and submits via wallet adapter or wallet
 6. On-chain `Registered` event emits tokenId (agent ID) + metadataURI + owner
 
 ## Source Code

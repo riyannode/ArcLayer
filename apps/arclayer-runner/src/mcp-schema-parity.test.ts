@@ -34,7 +34,7 @@ describe("1. Schema Registry Completeness", () => {
 
   const WRITE_TOOLS = [
     "x402.inspect", "x402.pay", "x402.batch_pay",
-    "erc8004.prepare_register", "erc8004.register_via_circle_cli",
+    "erc8004.prepare_register", "erc8004.register_execute",
     "erc8004.register_approval_create", "erc8004.register_approval_get",
     "erc8004.register_approval_approve", "erc8004.register_approval_reject",
     "erc8004.register_approval_execute", "erc8004.register_approval_approve_and_execute",

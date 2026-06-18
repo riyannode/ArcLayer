@@ -131,6 +131,6 @@ The following features are designed but **not yet wired into Runner startup**:
 - **Automatic heartbeat on startup** — call `provider.runtime_heartbeat` before processing any work; fail-fast if heartbeat fails
 - **On-chain receipt reconciliation** — compare local operation journal with on-chain job status; detect and resolve divergences
 - **Assigned job discovery on startup** — call `provider.list_assigned_jobs` to detect jobs assigned while Runner was offline
-- **Fail-fast startup health gate** — if critical dependencies (MCP connector, Circle CLI, RPC endpoint) are unavailable, exit non-zero immediately
+- **Fail-fast startup health gate** — if critical dependencies (MCP connector, wallet adapter, RPC endpoint) are unavailable, exit non-zero immediately
 
 When implemented, these will make the Runner truly disposable — the data directory holds local optimization state, but the authoritative state lives in Supabase + on-chain.

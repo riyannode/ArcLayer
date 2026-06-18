@@ -1,7 +1,7 @@
 /**
  * Runner-local MCP tool implementations.
  * Each tool calls existing Runner service methods.
- * No direct Circle CLI calls, no policy bypass.
+ * No direct wallet tooling calls, no policy bypass.
  *
  * Write/payment tools use Zod-based input parsing (from runner-core) to ensure
  * the same validation schema is used at parse time and execution time.
@@ -12,7 +12,6 @@ import type { RunnerServices } from "./services";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import type { RunnerConfig } from "@arclayer/runner-core";
 import { validateMcpToolInput } from "@arclayer/runner-core";
-import { getCirclePolicyStatus } from "./doctor";
 import { resolveAllSkills, resolveSkill, getSkillsForRole, getSkillsByIds, bundleSkillsForRole, SKILL_MANIFEST, type RunnerRole } from "./skill-manifest";
 import { getToolsForRole, getToolByName, CONSOLE_MCP_PROXY_TOOLS, ALL_TOOLS } from "./tool-registry";
 import { getRolePreset, listRolePresets } from "./role-presets";
@@ -30,7 +29,7 @@ export type McpToolContext = {
   /**
    * AbortSignal propagated from the broker timeout.
    * When the broker fires a timeout, this signal is aborted so that
-   * underlying Circle CLI subprocesses and HTTP fetches can be cancelled.
+   * underlying wallet-adapter operations and HTTP fetches can be cancelled.
    */
   signal?: AbortSignal;
   /**
@@ -202,8 +201,33 @@ export async function handleMcpTool(
         walletAddress: config.circleWalletAddress, budget: services.getSpendPolicyStatus() };
     }
 
-    case "circle.wallet_policy_status":
-      return getCirclePolicyStatus(config);
+    case "circle.wallet_policy_status": {
+      if (!config.circleWalletAddress) {
+        return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
+      }
+      const runnerPolicy = services.getSpendPolicyStatus();
+      if (services.wallet.walletBudget) {
+        const walletBudget = await services.wallet.walletBudget(config.circleWalletAddress);
+        return {
+          ok: true,
+          source: "wallet-adapter",
+          walletRail: config.walletRail,
+          walletAddress: config.circleWalletAddress,
+          runnerPolicy,
+          walletBudget,
+        };
+      }
+      return {
+        ok: true,
+        source: "runner-policy",
+        walletRail: config.walletRail,
+        walletAddress: config.circleWalletAddress,
+        runnerPolicy,
+        warnings: [
+          "Wallet adapter does not expose wallet policy status; returning Runner policy only.",
+        ],
+      };
+    }
 
     // ── x402 (Zod-validated) ──────────────────────────────────────────
     case "x402.inspect": {
@@ -492,7 +516,7 @@ export async function handleMcpTool(
     }
 
     // ── ERC-8004 Register (execute) (Zod-validated) ──────────────
-    case "erc8004.register_via_circle_cli": {
+    case "erc8004.register_execute": {
       const input = validateMcpToolInput<{ metadataURI: string }>(name, args);
       return services.registerIdentityViaWallet({
         metadataURI: input.metadataURI,

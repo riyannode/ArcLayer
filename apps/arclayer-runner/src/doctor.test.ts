@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { runDoctor, getCirclePolicyStatus } from "./doctor";
+import { runDoctor } from "./doctor";
 import type { RunnerConfig } from "@arclayer/runner-core";
 
 let tempDir: string;
@@ -28,8 +28,11 @@ function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
     defaultRole: "provider",
     allowedRoles: ["provider"],
     chain: "ARC-TESTNET",
-    circleCliBin: "circle",
     circleWalletAddress: "0x0000000000000000000000000000000000000002",
+    walletRail: "circle-dev",
+    circleApiKey: "test-api-key",
+    circleEntitySecret: "test-entity-secret",
+    circleWalletId: "test-wallet-id",
     paymentEnabled: true,
     perTxLimitUsdc: "0.01",
     dailyLimitUsdc: "1",
@@ -54,7 +57,7 @@ async function createLocalFiles(overrides: {
   const config = overrides.config ?? {
     agentId: "agent-1",
     role: "provider",
-    circle: { cliBin: "circle", walletAddress: "0x0000000000000000000000000000000000000002", chain: "ARC-TESTNET" },
+    circle: { walletAddress: "0x0000000000000000000000000000000000000002", chain: "ARC-TESTNET" },
     runtime: { target: "hermes" },
     mcp: { mode: "stdio" }
   };
@@ -197,98 +200,98 @@ describe("runDoctor: local file checks", () => {
   });
 });
 
-// ── Circle CLI advisory checks ──────────────────────────────────────────
+// ── Wallet adapter readiness checks ─────────────────────────────────────
 
-describe("runDoctor: Circle CLI checks", () => {
-  it("warns but does not crash when Circle CLI not installed", async () => {
-    const results = await runDoctor(makeConfig({ circleCliBin: "nonexistent-circle-cli" }));
-    expect(results.length).toBeGreaterThan(0);
-    for (const check of results) {
-      expect(check.name).toBeDefined();
-      expect(check.message).toBeDefined();
-    }
-    const cliCheck = results.find((r) => r.name === "Circle CLI binary");
-    expect(cliCheck!.ok).toBe(false);
+describe("runDoctor: wallet adapter readiness", () => {
+  it("reports wallet rail as circle-dev", async () => {
+    const results = await runDoctor(makeConfig());
+    const check = results.find((r) => r.name === "Wallet rail");
+    expect(check).toBeDefined();
+    expect(check!.ok).toBe(true);
+    expect(check!.message).toContain("circle-dev");
   });
 
+  it("reports Circle Dev Wallet API key configured", async () => {
+    const results = await runDoctor(makeConfig());
+    const check = results.find((r) => r.name === "Circle Dev Wallet API key");
+    expect(check).toBeDefined();
+    expect(check!.ok).toBe(true);
+  });
+
+  it("warns when API key missing", async () => {
+    const results = await runDoctor(makeConfig({ circleApiKey: undefined }));
+    const check = results.find((r) => r.name === "Circle Dev Wallet API key");
+    expect(check).toBeDefined();
+    expect(check!.ok).toBe(false);
+  });
+
+  it("reports entity secret configured", async () => {
+    const results = await runDoctor(makeConfig());
+    const check = results.find((r) => r.name === "Circle Dev Wallet entity secret");
+    expect(check).toBeDefined();
+    expect(check!.ok).toBe(true);
+  });
+
+  it("warns when entity secret missing", async () => {
+    const results = await runDoctor(makeConfig({ circleEntitySecret: undefined }));
+    const check = results.find((r) => r.name === "Circle Dev Wallet entity secret");
+    expect(check).toBeDefined();
+    expect(check!.ok).toBe(false);
+  });
+
+  it("reports wallet ID configured", async () => {
+    const results = await runDoctor(makeConfig());
+    const check = results.find((r) => r.name === "Circle wallet ID");
+    expect(check).toBeDefined();
+    expect(check!.ok).toBe(true);
+  });
+
+  it("warns when wallet ID missing", async () => {
+    const results = await runDoctor(makeConfig({ circleWalletId: undefined }));
+    const check = results.find((r) => r.name === "Circle wallet ID");
+    expect(check).toBeDefined();
+    expect(check!.ok).toBe(false);
+  });
+
+  it("includes all expected wallet adapter check names", async () => {
+    const results = await runDoctor(makeConfig());
+    const names = results.map((r) => r.name);
+    expect(names).toContain("Wallet rail");
+    expect(names).toContain("Circle Dev Wallet API key");
+    expect(names).toContain("Circle Dev Wallet entity secret");
+    expect(names).toContain("Circle wallet ID");
+  });
+});
+
+// ── Full check list ─────────────────────────────────────────────────────
+
+describe("runDoctor: full check list", () => {
   it("includes all expected check names", async () => {
     await createLocalFiles();
     const results = await runDoctor(makeConfig());
     const names = results.map((r) => r.name);
     expect(names).toContain("config.json exists");
     expect(names).toContain("policy.json exists");
-    expect(names).toContain("Circle CLI binary");
-    expect(names).toContain("Circle CLI version");
-    expect(names).toContain("Circle wallet status");
-    expect(names).toContain("Circle wallet policy");
+    expect(names).toContain("Wallet rail");
+    expect(names).toContain("Circle Dev Wallet API key");
+    expect(names).toContain("Circle Dev Wallet entity secret");
+    expect(names).toContain("Circle wallet ID");
     expect(names).toContain("Global Skill");
     expect(names).toContain("Runtime endpoint");
     expect(names).toContain("Runner secret");
     expect(names).toContain("Payment enabled");
     expect(names).toContain("Local spending policy");
   });
-});
 
-// ── Unsupported chain handling ──────────────────────────────────────────
-
-describe("runDoctor: unsupported chain handling", () => {
-  it("skips Circle wallet policy check on ARC-TESTNET", async () => {
+  it("does not include any Circle CLI check names", async () => {
     await createLocalFiles();
-    const results = await runDoctor(makeConfig({ chain: "ARC-TESTNET" }));
-    const policyCheck = results.find((r) => r.name === "Circle wallet policy");
-    expect(policyCheck).toBeDefined();
-    expect(policyCheck!.ok).toBe(true);
-    expect(policyCheck!.message).toContain("Skipped");
-    expect(policyCheck!.message).toContain("ARC-TESTNET");
-  });
-
-  it("skips Circle wallet budget check on ARC-TESTNET", async () => {
-    await createLocalFiles();
-    const results = await runDoctor(makeConfig({ chain: "ARC-TESTNET" }));
-    const budgetCheck = results.find((r) => r.name === "Circle wallet budget");
-    expect(budgetCheck).toBeDefined();
-    expect(budgetCheck!.ok).toBe(true);
-    expect(budgetCheck!.message).toContain("Skipped");
-  });
-
-  it("skips policy comparison on ARC-TESTNET", async () => {
-    await createLocalFiles();
-    const results = await runDoctor(makeConfig({ chain: "ARC-TESTNET" }));
-    const comparison = results.find((r) => r.name === "Policy comparison (Runner vs Circle)");
-    expect(comparison).toBeUndefined();
-  });
-});
-
-// ── getCirclePolicyStatus ───────────────────────────────────────────────
-
-describe("getCirclePolicyStatus", () => {
-  it("returns runnerPolicy even when wallet not configured", async () => {
-    const result = await getCirclePolicyStatus(makeConfig({ circleWalletAddress: undefined }));
-    expect(result.ok).toBe(false);
-    expect(result.runnerPolicy).toBeDefined();
-    expect(result.runnerPolicy.perTxLimitUsdc).toBe("0.01");
-    expect(result.warnings).toContain("CIRCLE_WALLET_ADDRESS not configured");
-  });
-
-  it("skips on unsupported chain", async () => {
-    const result = await getCirclePolicyStatus(makeConfig({ chain: "ARC-TESTNET" }));
-    expect(result.ok).toBe(true);
-    expect(result.warnings).toContain("Chain 'ARC-TESTNET' does not support wallet policy checks");
-  });
-
-  it("returns warnings when Circle CLI fails", async () => {
-    const result = await getCirclePolicyStatus(makeConfig({ circleCliBin: "nonexistent-cli", chain: "BASE" }));
-    expect(result.ok).toBe(false);
-    expect(result.runnerPolicy).toBeDefined();
-    expect(result.warnings.length).toBeGreaterThan(0);
-  });
-
-  it("returns runnerPolicy with correct structure", async () => {
-    const result = await getCirclePolicyStatus(makeConfig());
-    expect(result.runnerPolicy).toHaveProperty("perTxLimitUsdc");
-    expect(result.runnerPolicy).toHaveProperty("dailyLimitUsdc");
-    expect(result.runnerPolicy).toHaveProperty("monthlyLimitUsdc");
-    expect(result.runnerPolicy).toHaveProperty("batchMaxTotalUsdc");
-    expect(result.runnerPolicy).toHaveProperty("paymentEnabled");
+    const results = await runDoctor(makeConfig());
+    const names = results.map((r) => r.name);
+    expect(names).not.toContain("Circle CLI binary");
+    expect(names).not.toContain("Circle CLI version");
+    expect(names).not.toContain("Circle wallet status");
+    expect(names).not.toContain("Circle wallet policy");
+    expect(names).not.toContain("Circle wallet budget");
+    expect(names).not.toContain("Policy comparison (Runner vs Circle)");
   });
 });

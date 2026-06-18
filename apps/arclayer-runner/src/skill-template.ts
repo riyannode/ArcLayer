@@ -28,7 +28,7 @@ Your runtime calls these tools via \`arclayer-runner mcp\` (STDIO):
 - \`runner.policy\` — Current spending policy limits
 
 ### Circle Wallet
-- \`circle.status\` — Circle CLI version, wallet status, gateway balance
+- \`circle.status\` — Wallet adapter status, balance, gateway balance
 - \`circle.gateway_balance\` — Gateway USDC balance
 - \`circle.wallet_balance\` — Wallet USDC balance
 - \`circle.wallet_budget\` — Remaining rolling-window budget

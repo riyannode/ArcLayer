@@ -19,7 +19,6 @@ export function registerInitCommand(program: Command): void {
     .option("--role <role>", "Runner role: provider, client, evaluator, x402-agent", "provider")
     .option("--wallet <address>", "Circle wallet address (0x...)")
     .option("--chain <chain>", "Circle chain", "ARC-TESTNET")
-    .option("--cli-bin <path>", "Circle CLI binary path", "circle")
     .option("--per-tx <usdc>", "Per-transaction limit (USDC)", "0.01")
     .option("--daily <usdc>", "Daily spending limit (USDC)", "1")
     .option("--monthly <usdc>", "Monthly spending limit (USDC)", "20")
@@ -40,7 +39,6 @@ export function registerInitCommand(program: Command): void {
           role: opts.role,
           walletAddress: opts.wallet,
           chain: opts.chain,
-          cliBin: opts.cliBin,
           runtimeTarget: opts.target,
           paymentEnabled: opts.paymentEnabled,
           perTxLimitUsdc: opts.perTx,

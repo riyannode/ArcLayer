@@ -31,7 +31,6 @@ export type WriteConfigInput = {
   batchMaxItems?: number;
   batchMaxTotalUsdc?: string;
   allowedX402Hosts?: string[];
-  cliBin?: string;
   runnerId?: string;
   agentAddress?: string;
 };
@@ -86,7 +85,6 @@ export async function writeRunnerConfig(
     runnerId: input.runnerId,
     agentAddress: input.agentAddress,
     circle: {
-      cliBin: input.cliBin ?? "circle",
       walletAddress: input.walletAddress ?? undefined,
       chain: input.chain ?? "ARC-TESTNET"
     },

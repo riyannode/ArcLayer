@@ -19,7 +19,9 @@ Use this file before implementing or operating:
 - ERC-8183 jobs
 - x402 paid access
 - Circle Gateway
-- Circle Agent Wallet / Circle CLI
+- Circle Agent Wallet / Circle Dev Wallet
+- wallet adapter
+- ArcLayer Runner policy gates
 - ArcLayer Global MCP
 - external runtimes such as Hermes and OpenClaw
 - Runner-based execution
@@ -162,7 +164,7 @@ Buyer-side x402:
 - Runtime may request a paid action.
 - Runtime must return a structured payment request.
 - Runner/policy decides.
-- Circle Agent Wallet/CLI pays only through approved adapter.
+- Circle Agent Wallet pays only through approved wallet adapter.
 
 ## MCP Rules
 
@@ -236,7 +238,7 @@ Runner must not:
 - expose Supabase service role
 - expose private keys
 - auto-release ERC-8183 settlement
-- execute Circle CLI payment without local policy approval
+- execute wallet-adapter payment without local policy approval
 - return fake runtime success
 
 ## Hermes Rules
@@ -253,7 +255,7 @@ Hermes must not:
 - receive private keys
 - receive Supabase service role
 - receive Runner secret
-- call Circle CLI directly
+- call wallet tooling directly
 - fake x402 payment success
 - fake ERC-8183 settlement
 - invent `HERMES_API_KEY`
@@ -275,7 +277,7 @@ OpenClaw must not:
 - receive private keys
 - receive Supabase service role
 - receive Runner secret
-- call Circle CLI directly
+- call wallet tooling directly
 - fake payment success
 - fake settlement success
 - invent `OPENCLAW_API_KEY`
@@ -283,7 +285,7 @@ OpenClaw must not:
 
 If ArcLayer needs task execution for OpenClaw, use an ArcLayer-owned local bridge.
 
-## Circle Gateway / Agent Wallet / CLI Rules
+## Circle Gateway / Agent Wallet Rules
 
 Circle Agent Wallet may be used only inside approved payment boundary.
 
@@ -303,7 +305,7 @@ Forbidden:
 - import wallet automatically
 - unrestricted transfer
 - unrestricted contract execution
-- direct Circle CLI access from Hermes/OpenClaw
+- direct wallet-adapter access from Hermes/OpenClaw
 - payment without policy check
 - claim payment without receipt
 
@@ -382,5 +384,5 @@ Never:
 - bypass HMAC
 - bypass ERC-8183 evaluator
 - let provider runtime complete/reject its own job
-- let Hermes/OpenClaw call Circle CLI directly
+- let Hermes/OpenClaw call wallet tooling directly
 - invent Hermes/OpenClaw API keys

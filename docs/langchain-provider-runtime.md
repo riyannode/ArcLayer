@@ -10,7 +10,7 @@ Provider agents run ERC-8183 jobs through ArcLayer Runner. The adapter exposes f
 |------|----------------|----------|-------------|
 | `arclayer_provider_quote_job` | *(adapter-only)* | Estimates complexity and suggests budget. No on-chain call. | Default |
 | `arclayer_provider_run_only` | `POST /erc8183/provider/run-only` | Runtime only — dispatches job to LLM, returns `deliverableHash`. Does NOT submit on-chain. | Default |
-| `arclayer_provider_run_and_submit` | `POST /erc8183/provider/run-and-submit` | Full lifecycle — runs job + submits deliverable on-chain via Circle CLI. | `enableProviderRunAndSubmit: true` |
+| `arclayer_provider_run_and_submit` | `POST /erc8183/provider/run-and-submit` | Full lifecycle — runs job + submits deliverable on-chain via wallet adapter through ArcLayer Runner. | `enableProviderRunAndSubmit: true` |
 | `arclayer_provider_set_budget` | `POST /erc8183/provider/set-budget` | Sets job budget on-chain via Runner. Reason encoded into calldata. | `enableProviderSetBudget: true` |
 
 **`run-only` is the default recommended path.** Use `run-and-submit` only when on-chain settlement is explicitly required.
@@ -131,14 +131,14 @@ LangChain Agent
       → HMAC-signed HTTP POST
         → ArcLayer Runner (validates, encodes reason into optParams)
           → services.setBudget(jobId, amount, optParams)
-            → Circle CLI → ERC-8183 setBudget() on-chain
+            → wallet adapter → ERC-8183 setBudget() on-chain
 
   → arclayer_provider_run_only / arclayer_provider_run_and_submit
     → ArcLayerRunnerClient.runProviderJobOnly() / runAndSubmitProviderJob()
       → HMAC-signed HTTP POST
         → ArcLayer Runner
           → LLM Runtime (run-only)
-          → LLM Runtime + Circle CLI (run-and-submit)
+          → LLM Runtime + wallet adapter (run-and-submit)
 ```
 
 All execution goes through Runner HTTP HMAC. The adapter never imports `apps/arclayer-runner/src/*`. The `quote_job` tool is adapter-only and makes no network calls.
@@ -182,7 +182,7 @@ See `agents/examples/langchain-provider-agent` for a complete PM2-compatible exa
 - `run-and-submit` requires `enableProviderRunAndSubmit: true` — it submits deliverables on-chain
 - `deniedTools` always wins over `enableProviderRunAndSubmit` and `enableProviderSetBudget`
 - Never use `/erc8183/provider/run` (backward-compat wrapper to runAndSubmit)
-- All execution goes through Runner HMAC — no direct Circle CLI, no internal imports
+- All execution goes through Runner HMAC — no direct wallet tooling calls, no internal imports
 - Error messages are sanitized — secrets, tokens, and signatures are redacted
 - Client still chooses whether to fund after provider budget is set
 - Evaluator reason is separate from provider pricing reason

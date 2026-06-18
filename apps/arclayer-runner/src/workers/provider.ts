@@ -213,11 +213,11 @@ export class ProviderWorker extends EventEmitter {
       throw new Error(`ERC-8004 identity verification failed: ${err}`);
     }
 
-    // Verify Circle CLI status
+    // Verify wallet adapter status
     try {
       await this.services.circleStatus();
     } catch (err) {
-      throw new Error(`Circle CLI status check failed: ${err}`);
+      throw new Error(`Wallet adapter status check failed: ${err}`);
     }
   }
 

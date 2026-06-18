@@ -9,7 +9,7 @@
  *
  * Read-only introspection tools (runner.health, circle.status, etc.) have NO
  * input schema — they accept no arguments or only an optional `limit` number.
- * Only write/payment tools that touch Circle CLI or on-chain state are covered.
+ * Only write/payment tools that touch the wallet adapter or on-chain state are covered.
  */
 
 import { z } from "zod";
@@ -80,7 +80,7 @@ export const Erc8004PrepareRegisterInputSchema = z.object({
   metadataURI: z.string().min(1, "metadataURI is required").url("Invalid URL"),
 });
 
-/** erc8004.register_via_circle_cli — register identity on-chain */
+/** erc8004.register_execute — register identity on-chain */
 export const Erc8004RegisterExecuteInputSchema = z.object({
   metadataURI: z.string().min(1, "metadataURI is required").url("Invalid URL"),
 });
@@ -316,7 +316,7 @@ export const MCP_TOOL_INPUT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   "x402.pay": X402PayInputSchema,
   "x402.batch_pay": X402BatchPayInputSchema,
   "erc8004.prepare_register": Erc8004PrepareRegisterInputSchema,
-  "erc8004.register_via_circle_cli": Erc8004RegisterExecuteInputSchema,
+  "erc8004.register_execute": Erc8004RegisterExecuteInputSchema,
   "erc8183.provider_run_job": Erc8183ProviderRunJobInputSchema,
   "erc8183.provider_submit_deliverable": Erc8183ProviderSubmitDeliverableInputSchema,
   "erc8183.provider_run_and_submit": Erc8183ProviderRunAndSubmitInputSchema,

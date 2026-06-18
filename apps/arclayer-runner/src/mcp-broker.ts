@@ -76,7 +76,7 @@ export type AuditEntry = {
   costUsdc?: string;
   /**
    * true when the broker timed out but the underlying operation may still
-   * complete (non-idempotent on-chain writes, Circle CLI subprocesses).
+   * complete (non-idempotent on-chain writes through the wallet adapter).
    * Distinguishes "client timed out, operation may have completed" from
    * "operation actually failed".
    */
@@ -92,8 +92,8 @@ export type BrokerSessionState = {
 
 // ── Non-idempotent write tools ──────────────────────────────────────────
 // These tools perform on-chain writes that cannot be safely retried.
-// They get a higher default timeout (120s vs 30s) because Circle CLI
-// subprocess and on-chain confirmation can be slow.
+// They get a higher default timeout (120s vs 30s) because wallet-adapter
+// transaction submission and on-chain confirmation can be slow.
 
 const NON_IDEMPOTENT_WRITE_TOOLS = new Set([
   // x402 payments (idempotency-keyed, but timeout still leaves ambiguous state)
@@ -111,8 +111,8 @@ const NON_IDEMPOTENT_WRITE_TOOLS = new Set([
   "erc8183.claim_refund",
   "erc8183.set_provider",
   // ERC-8004 identity write
-  "erc8004.register_via_circle_cli",
-  // ERC-8004 chat-approved registration execute (on-chain via Circle CLI)
+  "erc8004.register_execute",
+  // ERC-8004 chat-approved registration execute (on-chain via wallet adapter)
   "erc8004.register_approval_execute",
   "erc8004.register_approval_approve_and_execute",
   // Circle gateway deposit
@@ -133,13 +133,12 @@ export function isNonIdempotentWrite(toolName: string): boolean {
 /**
  * Detect whether an error was caused by a broker timeout or signal abort.
  *
- * When the broker's AbortController fires, the Circle CLI subprocess is
- * killed by the OS signal. Node raises an AbortError / ABORT_ERR, NOT a
- * BrokerError. The BrokerError is only created by withTimeout() in the
- * transport layer (mcp-server / mcp-stdio). By the time the error reaches
- * a service method like payX402(), it's the AbortError from execFile.
+ * When the broker's AbortController fires, the underlying wallet-adapter
+ * operation or transport request may be aborted. Depending on where the abort
+ * is observed, callers may see a BrokerError, AbortError, ABORT_ERR, or an
+ * already-aborted signal.
  *
- * This helper checks all four shapes so callers can detect broker-initiated
+ * This helper checks all known shapes so callers can detect broker-initiated
  * cancellation regardless of where in the stack the error originated.
  */
 export function isBrokerAbortOrTimeout(error: unknown, signal?: AbortSignal): boolean {
