@@ -1213,4 +1213,401 @@ describe("identity-ensure", () => {
       expect(registerFn).not.toHaveBeenCalled();
     });
   });
+
+  // ── P1: Transferred-in identity tests ─────────────────────────────────
+
+  describe("P1: transferred-in identity scan", () => {
+    it("finds identity minted to another address then transferred to wallet", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const addrA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      const paddedAddrA = "0x" + addrA.slice(2).padStart(64, "0");
+      const paddedWallet = "0x" + wallet.slice(2).padStart(64, "0");
+      const tokenId = "500";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async (id: bigint) => id.toString() === tokenId ? wallet : "0x0000000000000000000000000000000000000000",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            paddedAddrA,
+            paddedWallet,
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: false,
+        walletAddress: wallet,
+        registerFn,
+        _onChainOverride: onChainOverride,
+      });
+
+      expect(result.action).toBe("confirmed_onchain");
+      expect(result.identity.tokenId).toBe(tokenId);
+    });
+
+    it("transferred-in token is verified with ownerOf", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const addrA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      const paddedAddrA = "0x" + addrA.slice(2).padStart(64, "0");
+      const paddedWallet = "0x" + wallet.slice(2).padStart(64, "0");
+      const tokenId = "500";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async () => addrA, // owner is different — transferred away
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            paddedAddrA,
+            paddedWallet,
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: wallet,
+        registerFn,
+        _onChainOverride: onChainOverride,
+      });
+
+      // Should fail because ownerOf doesn't match — scan found token but not owned
+      expect(result.action).toBe("failed");
+      expect(result.message).toContain("scan failed");
+    });
+
+    it("transferred-in token is reused and does not call registerFn", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const addrA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      const paddedAddrA = "0x" + addrA.slice(2).padStart(64, "0");
+      const paddedWallet = "0x" + wallet.slice(2).padStart(64, "0");
+      const tokenId = "500";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async (id: bigint) => id.toString() === tokenId ? wallet : "0x0000000000000000000000000000000000000000",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            paddedAddrA,
+            paddedWallet,
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: false,
+        walletAddress: wallet,
+        registerFn,
+        _onChainOverride: onChainOverride,
+      });
+
+      expect(result.action).toBe("confirmed_onchain");
+      expect(result.identity.tokenId).toBe(tokenId);
+      expect(registerFn).not.toHaveBeenCalled();
+    });
+
+    it("transferred-away token is ignored (balance 0 fast path)", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const paddedWallet = "0x" + wallet.slice(2).padStart(64, "0");
+      const tokenId = "500";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 0n, // balance is 0
+        ownerOf: async () => "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            paddedWallet,
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const identities = await scanExistingIdentityOnChain(wallet, onChainOverride);
+      expect(identities.length).toBe(0);
+    });
+  });
+
+  // ── P2: Durable Console sync pending tests ────────────────────────────
+
+  describe("P2: durable Console sync pending marker", () => {
+    it("finalize pending + sync retryable writes durable sync-pending marker", async () => {
+      writeRegistrationState({
+        status: "submitted",
+        txHash: "0xabc",
+        metadataURI: "data:test",
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        submittedAt: new Date().toISOString(),
+      });
+
+      const finalizeFn = vi.fn().mockResolvedValue({
+        status: "confirmed" as const,
+        tokenId: "42",
+      });
+      const syncToConsoleFn = vi.fn().mockResolvedValue({
+        ok: false,
+        error: "tx not mined",
+        retryable: true,
+      });
+
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        registerFn: vi.fn(),
+        finalizeFn,
+        syncToConsoleFn,
+        _onChainOverride: emptyOnChain,
+      });
+
+      expect(result.action).toBe("already_pending");
+      expect(result.message).toContain("Console sync pending");
+
+      // Verify durable marker was written
+      const identity = readIdentityState();
+      expect(identity.consoleSync).toBeDefined();
+      expect(identity.consoleSync?.status).toBe("pending");
+      expect(identity.consoleSync?.txHash).toBe("0xabc");
+    });
+
+    it("next run retries sync before already_confirmed", async () => {
+      writeIdentityState({
+        status: "confirmed",
+        tokenId: "42",
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        confirmedAt: new Date().toISOString(),
+        consoleSync: { status: "pending", txHash: "0xabc", metadataURI: "data:test", walletAddress: "0x1234567890abcdef1234567890abcdef12345678" },
+      });
+
+      const syncToConsoleFn = vi.fn().mockResolvedValue({ ok: true, tokenId: "42" });
+
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: false,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        registerFn: vi.fn(),
+        syncToConsoleFn,
+      });
+
+      expect(result.action).toBe("confirmed_onchain");
+      expect(result.message).toContain("confirmed and synced");
+      expect(syncToConsoleFn).toHaveBeenCalledTimes(1);
+    });
+
+    it("sync success clears pending marker", async () => {
+      writeIdentityState({
+        status: "confirmed",
+        tokenId: "42",
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        confirmedAt: new Date().toISOString(),
+        consoleSync: { status: "pending", txHash: "0xabc", metadataURI: "data:test", walletAddress: "0x1234567890abcdef1234567890abcdef12345678" },
+      });
+
+      const syncToConsoleFn = vi.fn().mockResolvedValue({ ok: true, tokenId: "42" });
+
+      await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: false,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        registerFn: vi.fn(),
+        syncToConsoleFn,
+      });
+
+      const identity = readIdentityState();
+      expect(identity.consoleSync?.status).toBe("confirmed");
+    });
+
+    it("already_confirmed without sync pending still returns immediately", async () => {
+      writeIdentityState({
+        status: "confirmed",
+        tokenId: "42",
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        confirmedAt: new Date().toISOString(),
+      });
+
+      const syncToConsoleFn = vi.fn();
+
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: false,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        registerFn: vi.fn(),
+        syncToConsoleFn,
+      });
+
+      expect(result.action).toBe("already_confirmed");
+      expect(syncToConsoleFn).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── P3: selectedAgentId with single identity tests ────────────────────
+
+  describe("P3: selectedAgentId with single identity", () => {
+    it("single discovered identity + selectedAgentId match => confirmed", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const tokenId = "100";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async (id: bigint) => id.toString() === tokenId ? wallet : "0x0000000000000000000000000000000000000000",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678",
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: false,
+        walletAddress: wallet,
+        selectedAgentId: "100",
+        registerFn,
+        _onChainOverride: onChainOverride,
+      });
+
+      expect(result.action).toBe("confirmed_onchain");
+      expect(result.identity.tokenId).toBe("100");
+    });
+
+    it("single discovered identity + selectedAgentId mismatch => failed", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const tokenId = "100";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async (id: bigint) => id.toString() === tokenId ? wallet : "0x0000000000000000000000000000000000000000",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678",
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: false,
+        walletAddress: wallet,
+        selectedAgentId: "999",
+        registerFn,
+        _onChainOverride: onChainOverride,
+      });
+
+      expect(result.action).toBe("failed");
+      expect(result.message).toContain("does not match");
+      expect(result.message).toContain("999");
+      expect(result.message).toContain("100");
+    });
+
+    it("mismatch does not write identity.json", async () => {
+      const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+      const tokenId = "100";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async (id: bigint) => id.toString() === tokenId ? wallet : "0x0000000000000000000000000000000000000000",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678",
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: false,
+        walletAddress: wallet,
+        selectedAgentId: "999",
+        registerFn: vi.fn(),
+        _onChainOverride: onChainOverride,
+      });
+
+      const identity = readIdentityState();
+      expect(identity.status).toBe("none");
+      expect(identity.tokenId).toBeUndefined();
+    });
+
+    it("provider tokenId 782224 with selectedAgentId 782224 remains safe", async () => {
+      const wallet = "0xbcbf06e5e79d5dd61a6a606ad2d4d2bd034e8af2";
+      const tokenId = "782224";
+      const paddedTokenId = "0x" + BigInt(tokenId).toString(16).padStart(64, "0");
+
+      const onChainOverride = {
+        balanceOf: async () => 1n,
+        ownerOf: async (id: bigint) => id.toString() === tokenId ? wallet : "0x0000000000000000000000000000000000000000",
+        getLogs: async () => [{
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x000000000000000000000000bcbf06e5e79d5dd61a6a606ad2d4d2bd034e8af2",
+            paddedTokenId,
+          ],
+          data: "0x",
+        }],
+      };
+
+      const registerFn = vi.fn();
+      const result = await ensureIdentity({
+        agentName: "test-provider",
+        role: "provider",
+        autoRegister: true,
+        walletAddress: wallet,
+        selectedAgentId: "782224",
+        registerFn,
+        _onChainOverride: onChainOverride,
+      });
+
+      expect(result.action).toBe("confirmed_onchain");
+      expect(result.identity.tokenId).toBe("782224");
+      expect(registerFn).not.toHaveBeenCalled();
+    });
+  });
 });
