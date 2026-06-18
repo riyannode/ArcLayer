@@ -1580,7 +1580,7 @@ export class RunnerServices {
     role: string,
     agentName: string,
   ): Promise<{ ok: boolean; tokenId?: string; error?: string; retryable?: boolean }> {
-    const consoleUrl = process.env.ARCLAYER_CONSOLE_URL;
+    const consoleUrl = this.config.consoleUrl ?? process.env.ARCLAYER_CONSOLE_URL;
     const syncSecret = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
 
     if (!consoleUrl || !syncSecret) {

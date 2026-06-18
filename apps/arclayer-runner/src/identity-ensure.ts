@@ -61,7 +61,8 @@ export type OnChainIdentity = {
 };
 
 export type ConsoleRosterEntry = {
-  token_id: string;
+  token_id?: string;
+  tokenId?: string;
   agent_id?: string;
   controller?: string;
   owner?: string;
@@ -221,23 +222,34 @@ export function mapToCircleIdempotencyKey(arclayerKey: string): string {
 
 /**
  * Check if a wallet already has ERC-8004 identity on-chain.
- * Uses viem public client — no private keys, read-only.
+ * Uses Transfer event log scanning instead of totalSupply (which reverts).
  *
- * Calls balanceOf(wallet) first, then scans ownerOf from totalSupply backwards.
- * Returns array of tokenIds owned by the wallet.
+ * Scans Transfer(0x0, wallet, tokenId) events in chunked block ranges,
+ * deduplicates tokenIds, and verifies current ownership with ownerOf.
  */
 export async function scanExistingIdentityOnChain(
   walletAddress: string,
-  _viemOverride?: { balanceOf: (addr: string) => Promise<bigint>; ownerOf: (id: bigint) => Promise<string>; totalSupply: () => Promise<bigint> },
+  _viemOverride?: {
+    getLogs: (params: { fromBlock: bigint; toBlock: bigint }) => Promise<Array<{ topics: string[]; data: string }>>;
+    ownerOf: (id: bigint) => Promise<string>;
+    balanceOf: (addr: string) => Promise<bigint>;
+  },
 ): Promise<OnChainIdentity[]> {
   const wallet = walletAddress.toLowerCase();
+  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+  const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const CHUNK_SIZE = 10_000n;
 
-  let readFns: { balanceOf: (addr: string) => Promise<bigint>; ownerOf: (id: bigint) => Promise<string>; totalSupply: () => Promise<bigint> };
+  let readFns: {
+    getLogs: (params: { fromBlock: bigint; toBlock: bigint }) => Promise<Array<{ topics: string[]; data: string }>>;
+    ownerOf: (id: bigint) => Promise<string>;
+    balanceOf: (addr: string) => Promise<bigint>;
+  };
 
   if (_viemOverride) {
     readFns = _viemOverride;
   } else {
-    const { createPublicClient, http, getContract, parseAbi } = await import("viem");
+    const { createPublicClient, http, getContract, parseAbi, toHex, pad } = await import("viem");
 
     const arcTestnet = {
       id: 5042002,
@@ -254,34 +266,97 @@ export async function scanExistingIdentityOnChain(
       abi: parseAbi([
         "function balanceOf(address account) view returns (uint256)",
         "function ownerOf(uint256 tokenId) view returns (address)",
-        "function totalSupply() view returns (uint256)",
       ]),
       client,
     });
 
+    const registryAddress = CONTRACTS.ERC8004_IDENTITY_REGISTRY as `0x${string}`;
+    const paddedWallet = pad(walletAddress as `0x${string}`, { size: 32 }).toLowerCase();
+
     readFns = {
-      balanceOf: (addr: string) => registry.read.balanceOf([addr as `0x${string}`]),
+      getLogs: async ({ fromBlock, toBlock }) => {
+        const logs = await client.getLogs({
+          address: registryAddress,
+          topics: [
+            TRANSFER_TOPIC,
+            pad(ZERO_ADDRESS as `0x${string}`, { size: 32 }), // from = mint (0x0)
+            paddedWallet as `0x${string}`, // to = wallet
+          ],
+          fromBlock,
+          toBlock,
+        });
+        return logs.map((l) => ({
+          topics: l.topics as string[],
+          data: l.data as string,
+        }));
+      },
       ownerOf: (id: bigint) => registry.read.ownerOf([id]),
-      totalSupply: () => registry.read.totalSupply(),
+      balanceOf: (addr: string) => registry.read.balanceOf([addr as `0x${string}`]),
     };
   }
 
+  // Check balance first — fast path if zero
   const balance = await readFns.balanceOf(wallet);
   if (balance === 0n) {
     return [];
   }
 
-  const totalSupply = await readFns.totalSupply();
-  const found: OnChainIdentity[] = [];
+  // Determine scan range
+  const scanFromBlock = process.env.ARCLAYER_ERC8004_SCAN_FROM_BLOCK
+    ? BigInt(process.env.ARCLAYER_ERC8004_SCAN_FROM_BLOCK)
+    : 40_000_000n;
 
-  for (let i = totalSupply; i > 0n && found.length < Number(balance); i--) {
+  // Get current block — use balanceOf as a proxy to detect chain is reachable,
+  // then scan logs. In override mode we don't have getBlock, so scan a bounded range.
+  let latestBlock = scanFromBlock + 100_000n; // bounded fallback
+  if (!_viemOverride) {
     try {
-      const owner = await readFns.ownerOf(i);
-      if (owner.toLowerCase() === wallet) {
-        found.push({ tokenId: i.toString(), owner: owner.toLowerCase() });
+      const { createPublicClient, http } = await import("viem");
+      const arcTestnet = {
+        id: 5042002,
+        name: "Arc Testnet",
+        nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+        rpcUrls: { default: { http: ["https://rpc.testnet.arc.network"] } },
+      } as const;
+      const client = createPublicClient({ chain: arcTestnet, transport: http() });
+      latestBlock = await client.getBlockNumber();
+    } catch {
+      // Fallback: use a reasonable upper bound
+      latestBlock = scanFromBlock + 100_000n;
+    }
+  }
+
+  // Scan Transfer events in chunks
+  const tokenIdSet = new Set<string>();
+  let fromBlock = scanFromBlock;
+
+  while (fromBlock <= latestBlock) {
+    const toBlock = fromBlock + CHUNK_SIZE > latestBlock ? latestBlock : fromBlock + CHUNK_SIZE;
+    try {
+      const logs = await readFns.getLogs({ fromBlock, toBlock });
+      for (const log of logs) {
+        // Topic[3] = tokenId (indexed)
+        if (log.topics.length >= 4 && log.topics[3]) {
+          const tokenId = BigInt(log.topics[3]).toString();
+          tokenIdSet.add(tokenId);
+        }
       }
     } catch {
-      // Burned or invalid tokenId, skip
+      // Chunk may be too large — continue with next chunk
+    }
+    fromBlock = toBlock + 1n;
+  }
+
+  // Verify current ownership — ignore transferred-away tokens
+  const found: OnChainIdentity[] = [];
+  for (const tokenId of tokenIdSet) {
+    try {
+      const owner = await readFns.ownerOf(BigInt(tokenId));
+      if (owner.toLowerCase() === wallet) {
+        found.push({ tokenId, owner: owner.toLowerCase() });
+      }
+    } catch {
+      // Burned or invalid tokenId — skip
     }
   }
 
@@ -452,6 +527,7 @@ export async function ensureIdentity(params: {
   mcpEndpoint?: string;
   autoRegister: boolean;
   confirmSecondMint?: boolean;
+  selectedAgentId?: string;
   walletAddress?: string;
   consoleUrl?: string;
   syncSecret?: string;
@@ -462,7 +538,11 @@ export async function ensureIdentity(params: {
   }>;
   syncToConsoleFn?: (txHash: string, controllerAddress: string, metadataURI: string, role: string, agentName: string) => Promise<{ ok: boolean; tokenId?: string; error?: string; retryable?: boolean }>;
   /** Override for on-chain reads (testing) */
-  _onChainOverride?: { balanceOf: (addr: string) => Promise<bigint>; ownerOf: (id: bigint) => Promise<string>; totalSupply: () => Promise<bigint> };
+  _onChainOverride?: {
+    getLogs: (params: { fromBlock: bigint; toBlock: bigint }) => Promise<Array<{ topics: string[]; data: string }>>;
+    ownerOf: (id: bigint) => Promise<string>;
+    balanceOf: (addr: string) => Promise<bigint>;
+  };
   /** Override for console roster check (testing) */
   _consoleOverride?: typeof checkConsoleRoster;
 }): Promise<EnsureResult> {
@@ -484,6 +564,41 @@ export async function ensureIdentity(params: {
       const finalizeResult = await finalizePendingIdentity({ finalizeFn: params.finalizeFn });
 
       if (finalizeResult.action === "confirmed" && finalizeResult.tokenId) {
+        // Fix 4: Retry Console sync after pending tx confirmation
+        if (params.syncToConsoleFn && pending.txHash) {
+          try {
+            const syncResult = await params.syncToConsoleFn(
+              pending.txHash,
+              pending.walletAddress ?? "",
+              pending.metadataURI ?? "",
+              params.role,
+              params.agentName,
+            );
+
+            if (syncResult.ok) {
+              return {
+                action: "confirmed_pending",
+                identity: readIdentityState(),
+                message: finalizeResult.message,
+              };
+            }
+
+            if (syncResult.retryable) {
+              return {
+                action: "already_pending",
+                identity: { ...existing, status: "pending", txHash: pending.txHash },
+                message: `Identity confirmed on-chain but Console sync pending. Re-run to sync roster.`,
+              };
+            }
+
+            // Sync failed permanently — warn but keep confirmed
+            process.stderr.write(`[identity-ensure] Console sync failed after finalize: ${syncResult.error}\n`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            process.stderr.write(`[identity-ensure] Console sync error after finalize (non-fatal): ${msg}\n`);
+          }
+        }
+
         return {
           action: "confirmed_pending",
           identity: readIdentityState(),
@@ -522,12 +637,22 @@ export async function ensureIdentity(params: {
   const short = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
 
   let onChainIdentities: OnChainIdentity[] = [];
+  let onChainScanFailed = false;
   try {
     onChainIdentities = await scanExistingIdentityOnChain(walletAddress, params._onChainOverride);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Non-fatal — continue with other checks
-    process.stderr.write(`[identity-ensure] On-chain scan failed (non-fatal): ${msg}\n`);
+    onChainScanFailed = true;
+    process.stderr.write(`[identity-ensure] On-chain scan failed: ${msg}\n`);
+
+    if (params.autoRegister) {
+      // Fail closed — block auto-register to avoid duplicate mint
+      return {
+        action: "failed",
+        identity: existing,
+        message: "On-chain identity scan failed. Auto-register blocked to avoid duplicate mint.",
+      };
+    }
   }
 
   // ── Step 4: Optionally check Console roster ───────────────────────────
@@ -544,11 +669,14 @@ export async function ensureIdentity(params: {
   // ── Step 5: Merge results — deduplicate by tokenId ────────────────────
   const tokenIdSet = new Set<string>();
   for (const id of onChainIdentities) tokenIdSet.add(id.tokenId);
-  for (const entry of consoleEntries) tokenIdSet.add(entry.token_id);
+  for (const entry of consoleEntries) {
+    const id = entry.tokenId ?? entry.token_id;
+    if (id) tokenIdSet.add(id);
+  }
   const allTokenIds = Array.from(tokenIdSet);
 
-  // Case: exactly one identity found — reuse it
-  if (allTokenIds.length === 1) {
+  // Case: exactly one identity found — reuse it (unless confirmSecondMint=true)
+  if (allTokenIds.length === 1 && !(params.confirmSecondMint && params.autoRegister)) {
     const tokenId = allTokenIds[0];
     const source = onChainIdentities.length > 0 ? "on-chain" : "console-roster";
 
@@ -571,12 +699,34 @@ export async function ensureIdentity(params: {
   // Case: multiple identities — require explicit selection
   if (allTokenIds.length > 1) {
     process.stderr.write(`[identity-ensure] Multiple identities found for wallet ${short}: tokenIds=${allTokenIds.join(",")}\n`);
+
+    if (params.selectedAgentId && allTokenIds.includes(params.selectedAgentId)) {
+      // selectedAgentId matches one of the found identities
+      const tokenId = params.selectedAgentId;
+      writeIdentityState({
+        status: "confirmed",
+        tokenId,
+        walletAddress,
+        confirmedAt: new Date().toISOString(),
+      });
+
+      process.stderr.write(`[identity-ensure] Selected tokenId=${tokenId} via selectedAgentId\n`);
+
+      return {
+        action: "confirmed_onchain",
+        identity: readIdentityState(),
+        message: `Identity selected: wallet=${short} tokenId=${tokenId}`,
+      };
+    }
+
     process.stderr.write(`[identity-ensure] Set ARCLAYER_AGENT_ID explicitly in .env.runner\n`);
 
     return {
       action: "failed",
       identity: { status: "none" },
-      message: `Multiple ERC-8004 identities found for wallet ${short}: tokenIds=${allTokenIds.join(",")}. Set ARCLAYER_AGENT_ID explicitly.`,
+      message: params.selectedAgentId
+        ? `ARCLAYER_AGENT_ID=${params.selectedAgentId} does not match any of [${allTokenIds.join(",")}]. Set a valid ARCLAYER_AGENT_ID.`
+        : `Multiple ERC-8004 identities found for wallet ${short}: tokenIds=${allTokenIds.join(",")}. Set ARCLAYER_AGENT_ID explicitly.`,
     };
   }
 
