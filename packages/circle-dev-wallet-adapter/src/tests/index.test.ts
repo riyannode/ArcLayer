@@ -91,24 +91,28 @@ describe("CircleDevWalletAdapter", () => {
   });
 
   describe("optional methods", () => {
-    it("inspectService is not implemented (undefined)", () => {
+    it("inspectService is implemented", () => {
       const adapter: WalletExecutionAdapter = new CircleDevWalletAdapter(baseOpts);
-      expect(adapter.inspectService).toBeUndefined();
+      expect(adapter.inspectService).toBeDefined();
+      expect(typeof adapter.inspectService).toBe("function");
     });
 
-    it("payService is not implemented (undefined)", () => {
+    it("payService is implemented", () => {
       const adapter: WalletExecutionAdapter = new CircleDevWalletAdapter(baseOpts);
-      expect(adapter.payService).toBeUndefined();
+      expect(adapter.payService).toBeDefined();
+      expect(typeof adapter.payService).toBe("function");
     });
 
-    it("gatewayDeposit is not implemented (undefined)", () => {
+    it("gatewayDeposit is implemented", () => {
       const adapter: WalletExecutionAdapter = new CircleDevWalletAdapter(baseOpts);
-      expect(adapter.gatewayDeposit).toBeUndefined();
+      expect(adapter.gatewayDeposit).toBeDefined();
+      expect(typeof adapter.gatewayDeposit).toBe("function");
     });
 
-    it("gatewayBalance is not implemented (undefined)", () => {
+    it("gatewayBalance is implemented", () => {
       const adapter: WalletExecutionAdapter = new CircleDevWalletAdapter(baseOpts);
-      expect(adapter.gatewayBalance).toBeUndefined();
+      expect(adapter.gatewayBalance).toBeDefined();
+      expect(typeof adapter.gatewayBalance).toBe("function");
     });
   });
 });

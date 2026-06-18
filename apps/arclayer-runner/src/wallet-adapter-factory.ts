@@ -1,44 +1,45 @@
 /**
  * Wallet adapter factory.
- * Creates the correct WalletExecutionAdapter based on config.walletRail.
- *
- * - "circle-cli" (default): CircleCliAdapter (shell bridge to Circle CLI)
- * - "circle-dev": CircleDevWalletAdapter (Circle Developer-Controlled Wallet API)
+ * Creates a CircleDevWalletAdapter from config.
+ * Circle CLI has been removed — circle-dev is the only rail.
  */
 import { RunnerError } from "@arclayer/runner-core";
-import type { RunnerConfig } from "@arclayer/runner-core";
-import type { WalletExecutionAdapter } from "@arclayer/runner-core";
-import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
+import type { RunnerConfig, WalletExecutionAdapter } from "@arclayer/runner-core";
 import { CircleDevWalletAdapter } from "@arclayer/circle-dev-wallet-adapter";
 
 export function createWalletAdapter(config: RunnerConfig): WalletExecutionAdapter {
-  if (config.walletRail === "circle-dev") {
-    // Validate required env for circle-dev rail
-    const missing: string[] = [];
-    if (!config.circleApiKey) missing.push("CIRCLE_API_KEY (circleApiKey)");
-    if (!config.circleEntitySecret) missing.push("CIRCLE_ENTITY_SECRET (circleEntitySecret)");
-    if (!config.circleWalletId) missing.push("CIRCLE_WALLET_ID (circleWalletId)");
-    if (!config.circleWalletAddress) missing.push("CIRCLE_WALLET_ADDRESS (circleWalletAddress)");
+  const walletRail = config.walletRail ?? "circle-dev";
 
-    if (missing.length > 0) {
-      throw new RunnerError(
-        "CONFIG_ERROR",
-        `circle-dev wallet rail requires: ${missing.join(", ")}`,
-        500,
-      );
-    }
-
-    return new CircleDevWalletAdapter({
-      apiKey: config.circleApiKey!,
-      entitySecret: config.circleEntitySecret!,
-      walletId: config.circleWalletId!,
-      walletSetId: config.circleWalletSetId,
-      walletAddress: config.circleWalletAddress!,
-      chain: config.chain,
-      baseUrl: config.circleApiBaseUrl,
-    });
+  if (walletRail !== "circle-dev") {
+    throw new RunnerError(
+      "CONFIG_ERROR",
+      `Unsupported wallet rail "${walletRail}". Circle CLI has been removed from the Runner execution path; use ARCLAYER_WALLET_RAIL=circle-dev.`,
+      500,
+    );
   }
 
-  // Default: circle-cli
-  return new CircleCliAdapter({ bin: config.circleCliBin });
+  const missing: string[] = [];
+  if (!config.circleApiKey) missing.push("CIRCLE_API_KEY");
+  if (!config.circleEntitySecret) missing.push("CIRCLE_ENTITY_SECRET");
+  if (!config.circleWalletId) missing.push("CIRCLE_WALLET_ID");
+  if (!config.circleWalletAddress) missing.push("CIRCLE_WALLET_ADDRESS");
+
+  if (missing.length > 0) {
+    throw new RunnerError(
+      "CONFIG_ERROR",
+      `circle-dev wallet rail requires: ${missing.join(", ")}`,
+      500,
+    );
+  }
+
+  return new CircleDevWalletAdapter({
+    apiKey: config.circleApiKey!,
+    entitySecret: config.circleEntitySecret!,
+    walletId: config.circleWalletId!,
+    walletSetId: config.circleWalletSetId,
+    walletAddress: config.circleWalletAddress!,
+    chain: config.chain,
+    baseUrl: config.circleApiBaseUrl,
+    accountType: config.circleWalletAccountType ?? "EOA",
+  });
 }

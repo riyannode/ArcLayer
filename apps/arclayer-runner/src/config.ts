@@ -224,6 +224,9 @@ function buildEnvConfig(): Record<string, unknown> {
   if (process.env.CIRCLE_WALLET_SET_ID) set("circleWalletSetId", process.env.CIRCLE_WALLET_SET_ID);
   if (process.env.CIRCLE_WALLET_ID) set("circleWalletId", process.env.CIRCLE_WALLET_ID);
   if (process.env.CIRCLE_API_BASE_URL) set("circleApiBaseUrl", process.env.CIRCLE_API_BASE_URL);
+  if (process.env.CIRCLE_WALLET_ACCOUNT_TYPE) set("circleWalletAccountType", process.env.CIRCLE_WALLET_ACCOUNT_TYPE);
+  if (process.env.ARCLAYER_MAX_JOB_BUDGET_USDC) set("maxJobBudgetUsdc", process.env.ARCLAYER_MAX_JOB_BUDGET_USDC);
+  if (process.env.ARCLAYER_REQUIRE_APPROVAL_ABOVE_USDC) set("requireApprovalAboveUsdc", process.env.ARCLAYER_REQUIRE_APPROVAL_ABOVE_USDC);
 
   if (process.env.ARCLAYER_PAYMENT_ENABLED) set("paymentEnabled", process.env.ARCLAYER_PAYMENT_ENABLED);
   if (process.env.ARCLAYER_PER_TX_LIMIT_USDC) set("perTxLimitUsdc", process.env.ARCLAYER_PER_TX_LIMIT_USDC);

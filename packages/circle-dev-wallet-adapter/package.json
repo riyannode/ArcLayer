@@ -35,6 +35,7 @@
   "dependencies": {
     "@arclayer/runner-core": "workspace:^",
     "@circle-fin/developer-controlled-wallets": "^10.6.0",
+    "@circle-fin/x402-batching": "^3.0.4",
     "viem": "^2.17.0"
   },
   "devDependencies": {

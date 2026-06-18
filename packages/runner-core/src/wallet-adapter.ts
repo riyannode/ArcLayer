@@ -1,25 +1,25 @@
 /**
  * Shared wallet execution interface.
- * Both CircleCliAdapter and CircleDevWalletAdapter implement this.
+ * CircleDevWalletAdapter implements this.
  * ExecutionGateway and RunnerServices depend on this interface only.
  */
 
 /** Normalized result from any wallet adapter write. */
 export type WalletExecuteResult = {
-  /** CLI command or API method that was called. */
+  /** API method or label that was called. */
   command: string;
-  /** Redacted arguments (CLI) or request summary (API). */
+  /** Redacted arguments or request summary. */
   args: string[];
   /** Standard output or JSON response body. */
   stdout: string;
-  /** Standard error or empty for API adapters. */
+  /** Standard error or empty. */
   stderr: string;
-  /** Parsed JSON from stdout/body, if available. */
+  /** Parsed JSON from body, if available. */
   json?: unknown;
 };
 
 export interface WalletExecutionAdapter {
-  /** Adapter version or CLI version. */
+  /** Adapter version. */
   version?(): Promise<WalletExecuteResult>;
 
   /** Wallet status / health check. */
@@ -32,13 +32,13 @@ export interface WalletExecutionAdapter {
     signal?: AbortSignal,
   ): Promise<WalletExecuteResult>;
 
-  /** Wallet budget (if supported). */
+  /** Wallet budget (if supported by adapter). */
   walletBudget?(
     address: string,
     signal?: AbortSignal,
   ): Promise<WalletExecuteResult>;
 
-  /** Gateway balance (if supported). */
+  /** Gateway balance (if supported by adapter). */
   gatewayBalance?(
     address: string,
     chain: string,
@@ -64,6 +64,7 @@ export interface WalletExecutionAdapter {
     body?: unknown;
     headers?: string[];
     timeoutSeconds?: number;
+    idempotencyKey?: string;
     signal?: AbortSignal;
   }): Promise<WalletExecuteResult>;
 
@@ -82,6 +83,7 @@ export interface WalletExecutionAdapter {
     contract: string;
     address: string;
     chain: string;
+    idempotencyKey?: string;
     signal?: AbortSignal;
   }): Promise<WalletExecuteResult>;
 
@@ -92,6 +94,7 @@ export interface WalletExecutionAdapter {
     spenderAddress: string;
     walletAddress: string;
     chain: string;
+    idempotencyKey?: string;
     signal?: AbortSignal;
   }): Promise<WalletExecuteResult>;
 
@@ -103,6 +106,7 @@ export interface WalletExecutionAdapter {
     address: string;
     chain: string;
     allowRegister?: boolean;
+    idempotencyKey?: string;
     signal?: AbortSignal;
   }): Promise<WalletExecuteResult>;
 
@@ -121,6 +125,7 @@ export interface WalletExecutionAdapter {
     address: string;
     chain: string;
     method?: string;
+    idempotencyKey?: string;
     signal?: AbortSignal;
   }): Promise<WalletExecuteResult>;
 }

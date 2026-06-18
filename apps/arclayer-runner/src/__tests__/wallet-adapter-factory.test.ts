@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
 
 // Mock the circle-dev-wallet-adapter module BEFORE importing the factory
 vi.mock("@arclayer/circle-dev-wallet-adapter", () => {
@@ -28,7 +27,10 @@ describe("createWalletAdapter", () => {
     chain: "ARC-TESTNET",
     circleCliBin: "circle",
     circleWalletAddress: "0x1234567890123456789012345678901234567890" as `0x${string}`,
-    walletRail: "circle-cli" as const,
+    walletRail: "circle-dev" as const,
+    circleApiKey: "test-api-key",
+    circleEntitySecret: "test-entity-secret",
+    circleWalletId: "test-wallet-id",
     paymentEnabled: false,
     perTxLimitUsdc: "0.01",
     dailyLimitUsdc: "1",
@@ -49,35 +51,29 @@ describe("createWalletAdapter", () => {
     runnerSecret: "test-runner-secret-long-enough",
   };
 
-  it("returns CircleCliAdapter by default (walletRail=circle-cli)", () => {
+  it("returns CircleDevWalletAdapter by default", () => {
     const adapter = createWalletAdapter(baseConfig);
-    expect(adapter).toBeInstanceOf(CircleCliAdapter);
-  });
-
-  it("returns CircleCliAdapter when walletRail is explicitly circle-cli", () => {
-    const adapter = createWalletAdapter({ ...baseConfig, walletRail: "circle-cli" });
-    expect(adapter).toBeInstanceOf(CircleCliAdapter);
+    expect((adapter as any)._mockBrand).toBe("circle-dev");
   });
 
   it("returns CircleDevWalletAdapter when walletRail is circle-dev", () => {
-    const adapter = createWalletAdapter({
-      ...baseConfig,
-      walletRail: "circle-dev",
-      circleApiKey: "test-key",
-      circleEntitySecret: "test-secret",
-      circleWalletId: "test-wallet-id",
-    });
-    // Check it's NOT a CircleCliAdapter (i.e., it's the mock dev wallet adapter)
-    expect(adapter).not.toBeInstanceOf(CircleCliAdapter);
+    const adapter = createWalletAdapter(baseConfig);
     expect((adapter as any)._mockBrand).toBe("circle-dev");
+  });
+
+  it("throws for unsupported walletRail", () => {
+    expect(() =>
+      createWalletAdapter({ ...baseConfig, walletRail: "unsupported" as any })
+    ).toThrow("Unsupported wallet rail");
   });
 
   it("throws when circle-dev rail is missing required config", () => {
     expect(() =>
       createWalletAdapter({
         ...baseConfig,
-        walletRail: "circle-dev",
-        // missing circleApiKey, circleEntitySecret, circleWalletId
+        circleApiKey: undefined,
+        circleEntitySecret: undefined,
+        circleWalletId: undefined,
       })
     ).toThrow("circle-dev wallet rail requires");
   });

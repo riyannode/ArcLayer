@@ -174,12 +174,15 @@ export const RunnerConfigSchema = z.object({
   circleCliBin: z.string().default("circle"),
   circleWalletAddress: HexAddressSchema.optional(),
   // ── Wallet Rail Selection ──────────────────────────────────────────────
-  walletRail: z.enum(["circle-cli", "circle-dev"]).default("circle-cli"),
+  walletRail: z.enum(["circle-dev"]).default("circle-dev"),
   circleApiKey: z.string().optional(),
   circleEntitySecret: z.string().optional(),
   circleWalletSetId: z.string().optional(),
   circleWalletId: z.string().optional(),
   circleApiBaseUrl: z.string().url().optional(),
+  circleWalletAccountType: z.enum(["EOA", "SCA"]).default("EOA"),
+  maxJobBudgetUsdc: z.string().default("5"),
+  requireApprovalAboveUsdc: z.string().optional(),
 
   paymentEnabled: z.preprocess(
     (v) => {

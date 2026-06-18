@@ -54,6 +54,12 @@ export type WriteOperationInput = {
   description?: string;
   /** ERC-8183 job ID for job-level locking. */
   jobId?: string;
+  /** Policy metadata for spend enforcement. */
+  policy?: {
+    action: string;
+    method: string;
+    amountUsdc?: string;
+  };
 };
 
 export type WriteOperationResult = {
@@ -72,9 +78,10 @@ export type WriteOperationResult = {
 // ── Wallet Execution Function Type ─────────────────────────────────
 
 export type WalletExecuteFn = (
-  circle: WalletExecutionAdapter,
-  signal?: AbortSignal
- ) => Promise<WalletExecuteResult>;
+  wallet: WalletExecutionAdapter,
+  signal?: AbortSignal,
+  idempotencyKey?: string,
+) => Promise<WalletExecuteResult>;
 
 // ── Result Classification ──────────────────────────────────────────────
 
@@ -226,7 +233,17 @@ export class ExecutionGateway {
       chain: string;
       dataDir?: string;
     },
-    journal?: OperationJournal
+    journal?: OperationJournal,
+    private readonly policyGuard?: {
+      assertAllowed(input: {
+        walletAddress: string; agentId: string;
+        action: string; contract: string; method: string; amountUsdc?: string;
+      }): void;
+      reserveSpend(input: {
+        walletAddress: string; agentId: string; action: string;
+        amountUsdc: string; operationId: string; idempotencyKey: string;
+      }): void;
+    }
   ) {
     if (journal) {
       this.journal = journal;
@@ -475,6 +492,28 @@ export class ExecutionGateway {
       return this.buildResult(operationId);
     }
 
+    // ── Policy guard (spend enforcement) ───────────────────────────
+    if (input.policy && this.policyGuard) {
+      this.policyGuard.assertAllowed({
+        walletAddress: input.walletAddress,
+        agentId: input.agentId ?? this.config.agentId,
+        action: input.policy.action,
+        contract: input.contractAddress,
+        method: input.policy.method,
+        amountUsdc: input.policy.amountUsdc,
+      });
+      if (input.policy.amountUsdc && input.policy.amountUsdc !== "0") {
+        this.policyGuard.reserveSpend({
+          walletAddress: input.walletAddress,
+          agentId: input.agentId ?? this.config.agentId,
+          action: input.policy.action,
+          amountUsdc: input.policy.amountUsdc,
+          operationId,
+          idempotencyKey: input.idempotencyKey,
+        });
+      }
+    }
+
     // ── Execute wallet write ──────────────────────────────────────
     // Update in-memory state to executing
     this.operations.get(operationId)!.state = "executing";
@@ -483,7 +522,7 @@ export class ExecutionGateway {
     let cliError: Error | undefined;
 
     try {
-      cliResult = await executeFn(this.wallet, signal);
+      cliResult = await executeFn(this.wallet, signal, input.idempotencyKey);
     } catch (error) {
       cliError = error instanceof Error ? error : new Error(String(error));
     }

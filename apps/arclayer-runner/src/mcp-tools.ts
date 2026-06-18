@@ -56,6 +56,11 @@ function encodeProviderBudgetReasonOptParams(input: {
   return `0x${Buffer.from(JSON.stringify(payload), "utf8").toString("hex")}` as `0x${string}`;
 }
 
+function unsupportedWalletMethod(method: string, walletRail: string) {
+  return { ok: false, error: "WALLET_METHOD_UNSUPPORTED", status: 501, method, walletRail,
+    message: \`\${method} is not supported by wallet rail \${walletRail}\` };
+}
+
 export async function handleMcpTool(
   name: string,
   args: Record<string, unknown>,
@@ -170,6 +175,9 @@ export async function handleMcpTool(
       if (!config.circleWalletAddress) {
         return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
       }
+      if (!services.wallet.gatewayBalance) {
+        return unsupportedWalletMethod("gatewayBalance", config.walletRail);
+      }
       const gw = await services.wallet.gatewayBalance(config.circleWalletAddress, config.chain);
       return { ok: true, result: gw };
     }
@@ -186,8 +194,12 @@ export async function handleMcpTool(
       if (!config.circleWalletAddress) {
         return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
       }
-      const budget = await services.wallet.walletBudget(config.circleWalletAddress);
-      return { ok: true, result: budget };
+      if (services.wallet.walletBudget) {
+        const budget = await services.wallet.walletBudget(config.circleWalletAddress);
+        return { ok: true, result: budget };
+      }
+      return { ok: true, source: "runner-policy", walletRail: config.walletRail,
+        walletAddress: config.circleWalletAddress, budget: services.getSpendPolicyStatus() };
     }
 
     case "circle.wallet_policy_status":
