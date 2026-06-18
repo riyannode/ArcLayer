@@ -204,6 +204,12 @@ export class RunnerServices {
           updatedAt: new Date().toISOString(),
         });
       },
+      finalizeSpend: (input) => {
+        this.spendLedger.markState(
+          { operationId: input.operationId },
+          input.state,
+        );
+      },
     });
     this.approvalManager = new ApprovalManager(
       this,

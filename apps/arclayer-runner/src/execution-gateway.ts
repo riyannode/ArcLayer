@@ -243,6 +243,9 @@ export class ExecutionGateway {
         walletAddress: string; agentId: string; action: string;
         amountUsdc: string; operationId: string; idempotencyKey: string;
       }): void;
+      finalizeSpend(input: {
+        operationId: string; idempotencyKey: string; state: "confirmed" | "failed";
+      }): void;
     }
   ) {
     if (journal) {
@@ -542,6 +545,15 @@ export class ExecutionGateway {
     if (terminalState === "unknown") {
       errorCode = "UNKNOWN_TX_STATE";
       errorMessage = "Wallet write timeout or ambiguous result — tx may have been broadcast";
+    }
+
+    // Finalize spend ledger reservation
+    if (this.policyGuard && input.policy?.amountUsdc && input.policy.amountUsdc !== "0") {
+      this.policyGuard.finalizeSpend({
+        operationId,
+        idempotencyKey: input.idempotencyKey,
+        state: terminalState === "confirmed" ? "confirmed" : "failed",
+      });
     }
 
     // Atomic finalization: state + txHash + result + receipt + lock release
