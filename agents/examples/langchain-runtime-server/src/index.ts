@@ -36,12 +36,17 @@ if (!OPENAI_API_KEY) {
 
 // ── LLM Setup ──────────────────────────────────────────────────────────────
 
-const llm = new ChatOpenAI({
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "";
+const llmConfig: Record<string, unknown> = {
   model: OPENAI_MODEL,
   apiKey: OPENAI_API_KEY,
   temperature: 0.2,
   maxTokens: 4096,
-});
+};
+if (OPENAI_BASE_URL) {
+  llmConfig.configuration = { baseURL: OPENAI_BASE_URL };
+}
+const llm = new ChatOpenAI(llmConfig);
 
 // ── Task Execution ──────────────────────────────────────────────────────────
 
