@@ -2086,6 +2086,16 @@ export class RunnerServices {
     };
   }
 
+  /**
+   * Proxy a tool call to Console MCP via the MCP connector.
+   * Used by HTTP routes for provider runtime tools that have no direct service method.
+   * Throws RunnerError if the tool is not allowlisted or upstream fails.
+   */
+  async proxyToConsoleMcp(toolName: string, args: Record<string, unknown>): Promise<unknown> {
+    const { proxyToConsoleMcp } = await import("./console-tool-proxy.js");
+    return proxyToConsoleMcp(toolName, args, this.mcp);
+  }
+
   async close(): Promise<void> {
     // Close gateway (operation journal SQLite) first
     this.gateway.close();

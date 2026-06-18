@@ -18,8 +18,8 @@ describe("createArcLayerLangChainAgent", () => {
     }) as unknown as { tools: Array<{ name: string }> };
 
     const toolNames = agent.tools.map((tool) => tool.name);
-    expect(toolNames).toContain("arclayer_x402_pay");
-    expect(toolNames).toContain("arclayer_x402_batch_pay");
+    expect(toolNames).toContain("x402_pay");
+    expect(toolNames).toContain("x402_batch_pay");
   });
 
   it("read-only role does not get payment tools", async () => {
@@ -33,8 +33,8 @@ describe("createArcLayerLangChainAgent", () => {
     }) as unknown as { tools: Array<{ name: string }> };
 
     const toolNames = agent.tools.map((tool) => tool.name);
-    expect(toolNames).toContain("arclayer_x402_inspect");
-    expect(toolNames).not.toContain("arclayer_x402_pay");
-    expect(toolNames).not.toContain("arclayer_x402_batch_pay");
+    expect(toolNames).toContain("x402_inspect");
+    expect(toolNames).not.toContain("x402_pay");
+    expect(toolNames).not.toContain("x402_batch_pay");
   });
 });
