@@ -75,7 +75,6 @@ export const InitFileConfigSchema = z.object({
   runnerId: z.string().optional(),
   agentAddress: z.string().optional(),
   circle: z.object({
-    cliBin: z.string().default("circle"),
     walletAddress: z.string().optional(),
     chain: z.string().default("ARC-TESTNET")
   }).default({}),
@@ -134,7 +133,6 @@ export function transformFileConfig(
     allowedRoles: [file.role],
     runnerId: file.runnerId ?? `runner-${file.agentId}`,
     agentAddress: file.agentAddress ?? "0x0000000000000000000000000000000000000000",
-    circleCliBin: file.circle?.cliBin ?? "circle",
     circleWalletAddress: file.circle?.walletAddress || undefined,
     chain: file.circle?.chain ?? "ARC-TESTNET",
     runtimeKind: file.runtime?.target ?? "openclaw",
@@ -171,7 +169,6 @@ export const RunnerConfigSchema = z.object({
   skillHash: z.string().optional(),
 
   chain: z.string().default("ARC-TESTNET"),
-  circleCliBin: z.string().default("circle"),
   circleWalletAddress: HexAddressSchema.optional(),
   // ── Wallet Rail Selection ──────────────────────────────────────────────
   walletRail: z.enum(["circle-dev"]).default("circle-dev"),

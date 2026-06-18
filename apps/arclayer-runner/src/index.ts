@@ -34,7 +34,7 @@ async function main() {
 
   program
     .name("arclayer-runner")
-    .description("ArcLayer Runner — policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402")
+    .description("ArcLayer Runner — policy boundary for external LLM runtimes with MCP bridge, wallet adapter, ERC-8004, ERC-8183, and x402")
     .version(PKG_VERSION);
 
   // ── start ─────────────────────────────────────────────────────────────

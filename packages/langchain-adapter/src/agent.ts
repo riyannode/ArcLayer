@@ -36,6 +36,7 @@ export function createArcLayerLangChainAgent(
   const {
     model,
     systemPrompt,
+    checkpointer,
     role = "read-only",
     ...toolOptions
   } = options;
@@ -50,5 +51,8 @@ export function createArcLayerLangChainAgent(
     model: model as Parameters<typeof createAgent>[0]["model"],
     tools,
     systemPrompt: prompt,
+    ...(checkpointer !== undefined && {
+      checkpointer: checkpointer as Parameters<typeof createAgent>[0]["checkpointer"],
+    }),
   });
 }

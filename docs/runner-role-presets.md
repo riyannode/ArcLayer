@@ -26,7 +26,7 @@ ERC-8004 identity is a shared capability attached to economic roles, not a stand
 
 ### Provider
 
-**Description:** Run jobs, submit deliverables, earn USDC. Full ERC-8183 lifecycle with Circle CLI adapter.
+**Description:** Run jobs, submit deliverables, earn USDC. Full ERC-8183 lifecycle with wallet adapter.
 
 **Capabilities:** erc8004, identity, erc8183, x402, runtime, receipts, ledger, circle
 

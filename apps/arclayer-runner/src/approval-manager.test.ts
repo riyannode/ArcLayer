@@ -1241,7 +1241,7 @@ describe("ApprovalManager", () => {
       expect(result.ok).toBe(false);
       expect(result.state).toBe("failed");
       expect(result.errorCode).toBe("no_console_url");
-      // Circle CLI should NOT have been called (service returned early)
+      // Wallet adapter should NOT have been called (service returned early)
       expect(result.txHash).toBeUndefined();
     });
 
@@ -1360,7 +1360,7 @@ describe("ApprovalManager", () => {
       expect(result2.state).toBe("executing");
       expect(result2.retryable).toBe(true);
 
-      // Verify: still not called Circle CLI again (skipOnChainTxHash)
+      // Verify: still not called wallet adapter again (skipOnChainTxHash)
       const secondCallParams = mockServices.registerErc8004WithApproval.mock.calls[1][0];
       expect(secondCallParams.skipOnChainTxHash).toBe("0xstillpending");
     });

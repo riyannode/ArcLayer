@@ -150,7 +150,6 @@ describe("writeRunnerConfig", () => {
     const result = await writeRunnerConfig({ agentId: "test-agent-9" });
 
     expect(result.config.circle.chain).toBe("ARC-TESTNET");
-    expect(result.config.circle.cliBin).toBe("circle");
     expect(result.config.runtime.target).toBe("openclaw");
     expect(result.config.mcp.mode).toBe("stdio");
     expect(result.policy.perTxLimitUsdc).toBe("0.01");
@@ -206,7 +205,7 @@ describe("InitFileConfigSchema", () => {
     const config = InitFileConfigSchema.parse({
       agentId: "test-agent",
       role: "provider",
-      circle: { cliBin: "circle", walletAddress: "0x0000000000000000000000000000000000000001", chain: "BASE" },
+      circle: { walletAddress: "0x0000000000000000000000000000000000000001", chain: "BASE" },
       runtime: { target: "openclaw" },
       mcp: { mode: "stdio" }
     });
@@ -220,7 +219,6 @@ describe("InitFileConfigSchema", () => {
     const config = InitFileConfigSchema.parse({ agentId: "test-agent" });
 
     expect(config.role).toBe("provider");
-    expect(config.circle.cliBin).toBe("circle");
     expect(config.circle.chain).toBe("ARC-TESTNET");
     expect(config.runtime.target).toBe("openclaw");
     expect(config.mcp.mode).toBe("stdio");

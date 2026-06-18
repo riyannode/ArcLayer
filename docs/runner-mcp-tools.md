@@ -17,7 +17,7 @@ npx -y @arclayer/setup@next
 
 ### Runner-Local Tools (21)
 
-Core Runner introspection, Circle CLI, x402, ERC-8004, and ERC-8183 tools.
+Core Runner introspection, wallet adapter, x402, ERC-8004, and ERC-8183 tools.
 
 | Tool | Description | Risk |
 |------|-------------|------|
@@ -27,7 +27,7 @@ Core Runner introspection, Circle CLI, x402, ERC-8004, and ERC-8183 tools.
 | `runner.receipts` | Recent receipts | read-only |
 | `runner.ledger` | Spending ledger | read-only |
 | `runner.policy` | Current policy limits | read-only |
-| `circle.status` | Circle CLI + wallet status | read-only |
+| `circle.status` | Wallet adapter status, balance, gateway balance | read-only |
 | `circle.gateway_balance` | Gateway balance | read-only |
 | `circle.wallet_balance` | Wallet balance | read-only |
 | `circle.wallet_budget` | Wallet budget/limits | read-only |
@@ -183,4 +183,4 @@ curl -i https://arclayers.xyz/api/x402/protected-resource
 
 - **No private keys**: Runner never stores or transmits private keys
 - **No OTP**: OTP flows are manual-only
-- **No shell execution**: Circle CLI uses `execFile` (no shell)
+- **No shell execution**: Wallet adapter uses HTTP (no shell)

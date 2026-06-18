@@ -655,7 +655,7 @@ describe("McpToolBroker", () => {
     });
 
     it("isNonIdempotentWrite returns true for identity and gateway writes", () => {
-      expect(isNonIdempotentWrite("erc8004.register_via_circle_cli")).toBe(true);
+      expect(isNonIdempotentWrite("erc8004.register_execute")).toBe(true);
       expect(isNonIdempotentWrite("erc8004.register_approval_execute")).toBe(true);
       expect(isNonIdempotentWrite("erc8004.register_approval_approve_and_execute")).toBe(true);
       expect(isNonIdempotentWrite("circle.gateway_deposit")).toBe(true);
@@ -686,7 +686,7 @@ describe("McpToolBroker", () => {
         "erc8183.reject_job",
         "erc8183.claim_refund",
         "erc8183.set_provider",
-        "erc8004.register_via_circle_cli",
+        "erc8004.register_execute",
         "circle.gateway_deposit",
       ];
       for (const tool of registryWriteTools) {

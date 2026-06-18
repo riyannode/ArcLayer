@@ -169,7 +169,7 @@ export const ROLE_PRESETS: RunnerRolePreset[] = [
       "runner.role_profile",
       "runner.role_tools",
       "erc8004.prepare_register",
-      "erc8004.register_via_circle_cli",
+      "erc8004.register_execute",
       "erc8004.register_approval_create",
       "erc8004.register_approval_get",
       "erc8004.register_approval_approve",

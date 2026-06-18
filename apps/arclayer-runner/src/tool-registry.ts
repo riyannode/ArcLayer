@@ -99,7 +99,7 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "approvals.list_pending", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "List pending approvals" },
 
   // ERC-8004 Register (execute) (guarded)
-  { name: "erc8004.register_via_circle_cli", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity"], roles: ["provider", "evaluator", "x402-agent"], requiresCircle: true, description: "Register ERC-8004 identity on-chain. Gated behind allowIdentityRegister." },
+  { name: "erc8004.register_execute", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity"], roles: ["provider", "evaluator", "x402-agent"], requiresCircle: true, description: "Register ERC-8004 identity on-chain. Gated behind allowIdentityRegister." },
 
   // ERC-8004 Chat-Approved Registration
   { name: "erc8004.register_approval_create", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["provider", "evaluator", "x402-agent"], description: "Create pending ERC-8004 registration approval (provider/evaluator)" },

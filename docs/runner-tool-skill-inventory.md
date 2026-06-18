@@ -31,7 +31,7 @@ Purpose: Classify all repo tools/skills/docs for Runner MCP expansion.
 | `runner.receipts` | mcp-schemas.ts | Recent receipts | read-only | all |
 | `runner.ledger` | mcp-schemas.ts | Spending ledger | read-only | all |
 | `runner.policy` | mcp-schemas.ts | Current policy limits | read-only | all |
-| `circle.status` | mcp-schemas.ts | Circle CLI + wallet status | read-only | provider, x402-agent |
+| `circle.status` | mcp-schemas.ts | Wallet adapter status, balance, gateway balance | read-only | provider, x402-agent |
 | `circle.gateway_balance` | mcp-schemas.ts | Gateway balance | read-only | provider, x402-agent |
 | `circle.wallet_balance` | mcp-schemas.ts | Wallet balance | read-only | provider, x402-agent |
 | `circle.wallet_budget` | mcp-schemas.ts | Wallet budget/limits | read-only | provider, x402-agent |
@@ -199,7 +199,7 @@ Source: `apps/console/src/lib/mcp/server.ts`
 | `apps/console/src/lib/contracts/erc8004.test.ts` | ERC-8004 contract tests |
 | `apps/console/src/lib/x402/exact/__tests__/*` | x402 integration tests |
 | `packages/runner-core/src/*.test.ts` | Runner-core tests |
-| `packages/circle-cli-adapter/src/*.test.ts` | Circle CLI adapter tests |
+| `packages/wallet-adapter/src/*.test.ts` | Wallet adapter tests |
 
 ---
 

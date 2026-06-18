@@ -2,7 +2,7 @@
  * @arclayer/langchain-adapter — LangChain tool wrappers.
  *
  * Creates LangChain tool() instances that call ArcLayer Runner via HMAC-authed HTTP.
- * All tools go through the Runner HTTP surface — no direct Circle CLI, no internal imports.
+ * All tools go through the Runner HTTP surface — no direct wallet tooling calls, no internal imports.
  *
  * Exception: adapterOnly tools (e.g. arclayer_provider_quote_job) compute locally
  * and do not make Runner HTTP calls.
@@ -715,7 +715,7 @@ function createProviderRunAndSubmitTool(
       name: toolName,
       description:
         "Run an ERC-8183 provider job AND submit the deliverable on-chain through ArcLayer Runner. " +
-        "This is the full lifecycle: runtime execution + Circle CLI submit. " +
+        "This is the full lifecycle: runtime execution + wallet-adapter on-chain submit through ArcLayer Runner. " +
         "Only use when on-chain settlement is explicitly required. " +
         "For runtime-only execution, prefer arclayer_provider_run_only.",
       schema: ProviderRunInputSchema,
@@ -727,7 +727,7 @@ function createProviderRunAndSubmitTool(
 
 /**
  * Create an adapter-only quote job tool.
- * No Runner call, no HMAC, no Circle CLI.
+ * No Runner call, no HMAC, no wallet tooling.
  * Pure complexity → budget mapping using the pricing policy.
  */
 function createProviderQuoteJobTool(

@@ -1,5 +1,5 @@
 /**
- * Reconciliation Engine — Crash recovery for Circle CLI operations.
+ * Reconciliation Engine — Crash recovery for wallet-adapter operations.
  *
  * Extends existing OperationJournal and ExecutionGateway with:
  *   - circle_transaction_id tracking
@@ -136,7 +136,7 @@ export function buildPostconditions(
  * Rules:
  *   1. If operation has txHash → verify postconditions
  *   2. If postconditions met → confirmed
- *   3. If postconditions not met → check Circle CLI transaction status
+ *   3. If postconditions not met → check wallet-adapter transaction status
  *   4. If Circle says confirmed → confirmed (update txHash)
  *   5. If Circle says failed → failed
  *   6. If Circle says pending → retry later
@@ -206,7 +206,7 @@ export async function reconcileOperation(
     }
   }
 
-  // Case 2: Has circleTransactionId but no txHash → check Circle CLI
+  // Case 2: Has circleTransactionId but no txHash → check wallet adapter
   if (op.circleTransactionId && checkCircleTransaction) {
     try {
       const circleResult = await checkCircleTransaction(op.circleTransactionId);

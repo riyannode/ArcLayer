@@ -2,7 +2,7 @@
  * Client Workflow — Human-assisted ERC-8183 job creation via Hermes/OpenClaw.
  *
  * Client VPS flow:
- *   Hermes/OpenClaw → local Runner MCP role=client → Circle CLI → ERC-8183
+ *   Hermes/OpenClaw → local Runner MCP role=client → wallet adapter → ERC-8183
  *
  * Chat transport (Telegram, Discord, etc.) is owned by Hermes/OpenClaw.
  * ArcLayer exposes MCP tools only.
