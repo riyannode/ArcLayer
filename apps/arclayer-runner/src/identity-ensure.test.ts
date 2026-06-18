@@ -1,3 +1,11 @@
+
+// Helper: empty on-chain override (no existing identities)
+const emptyOnChain = {
+  balanceOf: async () => 0n,
+  ownerOf: async () => { throw new Error('no token'); },
+  totalSupply: async () => 0n,
+};
+
 /**
  * Identity ensure tests.
  *
@@ -173,7 +181,9 @@ describe("identity-ensure", () => {
         agentName: "test",
         role: "provider",
         autoRegister: true,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
         registerFn,
+        _onChainOverride: emptyOnChain,
       });
 
       expect(registerFn).toHaveBeenCalledTimes(1);
@@ -183,7 +193,9 @@ describe("identity-ensure", () => {
         agentName: "test",
         role: "provider",
         autoRegister: true,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
         registerFn,
+        _onChainOverride: emptyOnChain,
       });
 
       expect(result.action).toBe("already_pending");
@@ -334,8 +346,10 @@ describe("identity-ensure", () => {
         agentName: "test",
         role: "provider",
         autoRegister: true,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
         registerFn,
         finalizeFn,
+        _onChainOverride: emptyOnChain,
       });
 
       expect(result.action).toBe("confirmed_pending");
@@ -359,8 +373,10 @@ describe("identity-ensure", () => {
         agentName: "test",
         role: "provider",
         autoRegister: true,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
         registerFn,
         finalizeFn,
+        _onChainOverride: emptyOnChain,
       });
 
       // Should attempt to re-register since the previous failed
