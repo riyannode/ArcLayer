@@ -12,7 +12,6 @@ import type { RunnerServices } from "./services";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import type { RunnerConfig } from "@arclayer/runner-core";
 import { validateMcpToolInput } from "@arclayer/runner-core";
-import { getCirclePolicyStatus } from "./doctor";
 import { resolveAllSkills, resolveSkill, getSkillsForRole, getSkillsByIds, bundleSkillsForRole, SKILL_MANIFEST, type RunnerRole } from "./skill-manifest";
 import { getToolsForRole, getToolByName, CONSOLE_MCP_PROXY_TOOLS, ALL_TOOLS } from "./tool-registry";
 import { getRolePreset, listRolePresets } from "./role-presets";
@@ -202,8 +201,33 @@ export async function handleMcpTool(
         walletAddress: config.circleWalletAddress, budget: services.getSpendPolicyStatus() };
     }
 
-    case "circle.wallet_policy_status":
-      return getCirclePolicyStatus(config);
+    case "circle.wallet_policy_status": {
+      if (!config.circleWalletAddress) {
+        return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
+      }
+      const runnerPolicy = services.getSpendPolicyStatus();
+      if (services.wallet.walletBudget) {
+        const walletBudget = await services.wallet.walletBudget(config.circleWalletAddress);
+        return {
+          ok: true,
+          source: "wallet-adapter",
+          walletRail: config.walletRail,
+          walletAddress: config.circleWalletAddress,
+          runnerPolicy,
+          walletBudget,
+        };
+      }
+      return {
+        ok: true,
+        source: "runner-policy",
+        walletRail: config.walletRail,
+        walletAddress: config.circleWalletAddress,
+        runnerPolicy,
+        warnings: [
+          "Wallet adapter does not expose wallet policy status; returning Runner policy only.",
+        ],
+      };
+    }
 
     // ── x402 (Zod-validated) ──────────────────────────────────────────
     case "x402.inspect": {

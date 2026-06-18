@@ -10,6 +10,8 @@ Use this file before implementing or operating:
 - x402 paid access
 - Circle Gateway
 - Circle Agent Wallet / Circle Dev Wallet
+- wallet adapter
+- ArcLayer Runner policy gates
 - ArcLayer Global MCP
 - external runtimes such as Hermes and OpenClaw
 - Runner-based execution
@@ -152,7 +154,7 @@ Buyer-side x402:
 - Runtime may request a paid action.
 - Runtime must return a structured payment request.
 - Runner/policy decides.
-- Circle Agent Wallet/CLI pays only through approved adapter.
+- Circle Agent Wallet pays only through approved wallet adapter.
 
 ## MCP Rules
 
@@ -273,7 +275,7 @@ OpenClaw must not:
 
 If ArcLayer needs task execution for OpenClaw, use an ArcLayer-owned local bridge.
 
-## Circle Gateway / Agent Wallet / CLI Rules
+## Circle Gateway / Agent Wallet Rules
 
 Circle Agent Wallet may be used only inside approved payment boundary.
 

@@ -115,7 +115,7 @@ These tools let a user register an ERC-8004 provider or evaluator identity throu
 1. User requests registration → `erc8004.register_approval_create` creates a pending approval.
 2. User approves → `erc8004.register_approval_approve_and_execute` (or separate approve + execute).
 3. Runner validates Console URL and sync secret before submitting any on-chain transaction.
-4. Runner calls Circle CLI registration through the configured Circle signer.
+4. Runner calls wallet-adapter registration through the configured Circle signer.
 5. Runner posts to `/api/erc8004/register/sync` with `Authorization: Bearer` header, including the approved `metadataURI`.
 6. Console validates tx hash, controller, and asserts the registered metadata URI matches the approved metadata URI.
 7. Console reads the receipt, extracts `tokenId`, upserts `erc8004_agents`, and verifies visibility.
@@ -130,7 +130,7 @@ These tools let a user register an ERC-8004 provider or evaluator identity throu
 
 - Only Arc Testnet canonical ERC-8004 registry is supported.
 - Canonical chain and registry values must come from SDK constants (`ARC_CHAIN_ID`, `CONTRACTS.ERC8004_IDENTITY_REGISTRY`).
-- `ownerAddress` must match `controllerAddress` for the current Circle CLI `register(string)` flow.
+- `ownerAddress` must match `controllerAddress` for the current wallet-adapter `register(string)` flow.
 - `metadataURI` must be a valid URI and may use `http:`, `https:`, `ipfs:`, or `arclayer:`.
 - Duplicate active approvals and previously failed approvals with on-chain `txHash` block new duplicate registration attempts.
 
@@ -414,7 +414,7 @@ It creates:
 
 The user still signs/mints ERC-8004 identity in ArcLayer web. MCP and Codex do not hold private keys and do not sign on behalf of the user.
 
-Agent Bundle onboarding stops at readiness. It does not configure Runner runtime, payer wallet, Circle CLI, Gateway balance, live ERC-8183 job execution, or live x402 payment execution. Those are later setup steps.
+Agent Bundle onboarding stops at readiness. It does not configure Runner runtime, payer wallet, wallet adapter, Gateway balance, live ERC-8183 job execution, or live x402 payment execution. Those are later setup steps.
 
 ### Tools
 

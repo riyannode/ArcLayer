@@ -47,6 +47,10 @@ const RUNNER_SECRET = process.env.ARCLAYER_RUNNER_SECRET;
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "openai:gpt-4o";
 const ENABLE_AUTO_SUBMIT = process.env.ENABLE_AUTO_SUBMIT === "true";
 const ENABLE_PROVIDER_SET_BUDGET = process.env.ENABLE_PROVIDER_SET_BUDGET === "true";
+// Memory is disabled by default. When enabled, LangGraph may checkpoint
+// messages containing provider job input. Only enable memory for safe,
+// non-sensitive job payloads until job context is loaded server-side
+// instead of from the prompt.
 const ENABLE_MEMORY = process.env.ENABLE_MEMORY === "true";
 const MEMORY_SCOPE = process.env.MEMORY_SCOPE ?? "job";
 const TASK_SOURCE = process.env.TASK_SOURCE ?? "none";
@@ -104,7 +108,10 @@ let staticTaskConsumed = false;
 
 // ── Memory Helpers ─────────────────────────────────────────────────────
 
-const MAX_MEMORY_DESCRIPTION_CHARS = 500;
+// NOTE: When ENABLE_MEMORY=true, LangGraph's MemorySaver checkpoints all
+// messages — including the full job payload in the prompt. Do NOT enable
+// memory for jobs containing sensitive/private user data until a future
+// server-side job-context store avoids checkpointing raw input.
 
 function safeThreadPart(value: unknown, fallback: string): string {
   if (typeof value !== "string" || value.trim() === "") return fallback;
@@ -116,25 +123,6 @@ function getProviderThreadId(job: unknown): string {
   const taskId = safeThreadPart(record.taskId, "task");
   const jobId = safeThreadPart(record.jobId, "job");
   return `provider:${taskId}:${jobId}`;
-}
-
-function summarizeJobForMemory(job: unknown): unknown {
-  const record = job && typeof job === "object" ? job as Record<string, unknown> : {};
-  const metadata = record.metadata && typeof record.metadata === "object"
-    ? record.metadata as Record<string, unknown>
-    : undefined;
-  return {
-    taskId: record.taskId,
-    jobId: record.jobId,
-    agentId: record.agentId,
-    provider: record.provider,
-    evaluator: record.evaluator,
-    description: typeof record.description === "string"
-      ? record.description.slice(0, MAX_MEMORY_DESCRIPTION_CHARS)
-      : record.description,
-    inputSummary: "[raw structured input omitted from memory prompt]",
-    metadataKeys: metadata ? Object.keys(metadata) : [],
-  };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -167,11 +155,7 @@ function loadStaticProviderJob(): unknown | null {
 }
 
 function buildProviderPrompt(job: unknown): string {
-  const jobJson = JSON.stringify(
-    ENABLE_MEMORY ? summarizeJobForMemory(job) : job,
-    null,
-    2,
-  );
+  const jobJson = JSON.stringify(job, null, 2);
 
   if (ENABLE_PROVIDER_SET_BUDGET) {
     const parts = [

@@ -1,5 +1,3 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { existsSync, readFileSync } from "node:fs";
 import {
   resolveRunnerPaths,
@@ -10,8 +8,6 @@ import {
   type RunnerConfig
 } from "@arclayer/runner-core";
 
-const execFileAsync = promisify(execFile);
-
 export type CheckResult = {
   name: string;
   ok: boolean;
@@ -19,108 +15,8 @@ export type CheckResult = {
   details?: unknown;
 };
 
-async function tryExec(bin: string, args: string[], timeoutMs = 10000): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-  try {
-    const { stdout, stderr } = await execFileAsync(bin, args, { timeout: timeoutMs });
-    return { ok: true, stdout, stderr };
-  } catch (error: any) {
-    return { ok: false, stdout: error.stdout ?? "", stderr: error.stderr ?? error.message };
-  }
-}
-
-function tryParseJson(text: string): unknown | undefined {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
- * Parse Circle wallet limit output to extract policy caps.
- */
-function parseCirclePolicyLimit(output: unknown): Record<string, string> | undefined {
-  if (!output || typeof output !== "object") return undefined;
-  const obj = output as Record<string, unknown>;
-  const limits = obj.limits ?? obj.policy ?? obj;
-  if (typeof limits !== "object" || !limits) return undefined;
-
-  const result: Record<string, string> = {};
-  for (const [key, val] of Object.entries(limits as Record<string, unknown>)) {
-    if (typeof val === "string" || typeof val === "number") {
-      result[key] = String(val);
-    }
-  }
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
-/**
- * Compare Runner policy against Circle wallet policy caps.
- */
-function comparePolicies(
-  config: RunnerConfig,
-  circlePolicy: Record<string, string> | undefined
-): string[] {
-  const warnings: string[] = [];
-  if (!circlePolicy) {
-    warnings.push("Circle wallet policy found but could not compare automatically; inspect manually.");
-    return warnings;
-  }
-
-  const perTxKey = Object.keys(circlePolicy).find((k) =>
-    /per.?tx|per.?transaction|single/i.test(k)
-  );
-  const dailyKey = Object.keys(circlePolicy).find((k) => /daily|day/i.test(k));
-  const monthlyKey = Object.keys(circlePolicy).find((k) => /monthly|month/i.test(k));
-
-  if (perTxKey) {
-    const circleVal = parseFloat(circlePolicy[perTxKey]);
-    const runnerVal = parseFloat(config.perTxLimitUsdc);
-    if (!isNaN(circleVal) && runnerVal > circleVal) {
-      warnings.push(
-        `Runner perTxLimitUsdc (${config.perTxLimitUsdc}) exceeds Circle per-tx policy (${circlePolicy[perTxKey]})`
-      );
-    }
-  }
-
-  if (dailyKey) {
-    const circleVal = parseFloat(circlePolicy[dailyKey]);
-    const runnerVal = parseFloat(config.dailyLimitUsdc);
-    if (!isNaN(circleVal) && runnerVal > circleVal) {
-      warnings.push(
-        `Runner dailyLimitUsdc (${config.dailyLimitUsdc}) exceeds Circle daily policy (${circlePolicy[dailyKey]})`
-      );
-    }
-  }
-
-  if (monthlyKey) {
-    const circleVal = parseFloat(circlePolicy[monthlyKey]);
-    const runnerVal = parseFloat(config.monthlyLimitUsdc);
-    if (!isNaN(circleVal) && runnerVal > circleVal) {
-      warnings.push(
-        `Runner monthlyLimitUsdc (${config.monthlyLimitUsdc}) exceeds Circle monthly policy (${circlePolicy[monthlyKey]})`
-      );
-    }
-  }
-
-  if (!perTxKey && !dailyKey && !monthlyKey) {
-    warnings.push("Circle wallet policy found but could not compare automatically; inspect manually.");
-  }
-
-  return warnings;
-}
-
-/**
- * Chains where Circle wallet policy/budget checks are not supported.
- */
-const UNSUPPORTED_POLICY_CHAINS = new Set([
-  "ARC-TESTNET",
-  "ARC",
-  "LOCAL"
-]);
-
-/**
- * Run all doctor checks: local file mode + Circle CLI + runtime.
+ * Run all doctor checks: local file mode + wallet adapter readiness + runtime.
  */
 export async function runDoctor(config: RunnerConfig): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
@@ -350,137 +246,48 @@ export async function runDoctor(config: RunnerConfig): Promise<CheckResult[]> {
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // CIRCLE CLI CHECKS (advisory — warn but don't crash)
+  // WALLET ADAPTER READINESS CHECKS
   // ══════════════════════════════════════════════════════════════════════
 
-  // 14. Circle CLI binary exists
-  const binCheck = await tryExec("which", [config.circleCliBin]);
+  // 14. Wallet rail
+  const walletRailValid = config.walletRail === "circle-dev";
   results.push({
-    name: "Circle CLI binary",
-    ok: binCheck.ok,
-    message: binCheck.ok
-      ? `Found: ${binCheck.stdout.trim()}`
-      : `Binary '${config.circleCliBin}' not found in PATH (install Circle CLI for payments)`
+    name: "Wallet rail",
+    ok: walletRailValid,
+    message: walletRailValid
+      ? `Rail: ${config.walletRail}`
+      : `Unsupported wallet rail: ${config.walletRail}. Only circle-dev is supported.`
   });
 
-  // 14. circle --version works
-  if (binCheck.ok) {
-    const versionCheck = await tryExec(config.circleCliBin, ["--version"]);
-    results.push({
-      name: "Circle CLI version",
-      ok: versionCheck.ok,
-      message: versionCheck.ok
-        ? versionCheck.stdout.trim().split("\n")[0]
-        : `Failed: ${versionCheck.stderr.trim()}`
-    });
-  } else {
-    results.push({
-      name: "Circle CLI version",
-      ok: false,
-      message: "Skipped: binary not found"
-    });
-  }
+  // 15. Circle Dev Wallet API key configured
+  const hasApiKey = typeof config.circleApiKey === "string" && config.circleApiKey.length > 0;
+  results.push({
+    name: "Circle Dev Wallet API key",
+    ok: hasApiKey,
+    message: hasApiKey
+      ? "Configured"
+      : "CIRCLE_API_KEY not set (required for Circle Dev Wallet)"
+  });
 
-  // 15. Circle wallet status
-  if (binCheck.ok) {
-    const statusCheck = await tryExec(config.circleCliBin, ["wallet", "status", "--type", "agent", "--output", "json"]);
-    results.push({
-      name: "Circle wallet status",
-      ok: statusCheck.ok,
-      message: statusCheck.ok
-        ? "Agent wallet accessible"
-        : `Failed: ${statusCheck.stderr.trim().slice(0, 200)} (run: circle wallet login)`
-    });
-  } else {
-    results.push({
-      name: "Circle wallet status",
-      ok: false,
-      message: "Skipped: binary not found"
-    });
-  }
+  // 16. Circle Dev Wallet entity secret configured
+  const hasEntitySecret = typeof config.circleEntitySecret === "string" && config.circleEntitySecret.length > 0;
+  results.push({
+    name: "Circle Dev Wallet entity secret",
+    ok: hasEntitySecret,
+    message: hasEntitySecret
+      ? "Configured"
+      : "CIRCLE_ENTITY_SECRET not set (required for Circle Dev Wallet)"
+  });
 
-  // 16. Circle wallet policy/budget (skip for unsupported chains)
-  const skipPolicyCheck = UNSUPPORTED_POLICY_CHAINS.has(config.chain?.toUpperCase());
-
-  if (skipPolicyCheck) {
-    results.push({
-      name: "Circle wallet policy",
-      ok: true,
-      message: `Skipped: chain '${config.chain}' does not support wallet policy checks`
-    });
-    results.push({
-      name: "Circle wallet budget",
-      ok: true,
-      message: `Skipped: chain '${config.chain}' does not support budget checks`
-    });
-  } else if (binCheck.ok && config.circleWalletAddress) {
-    // Policy check
-    const policyCheck = await tryExec(config.circleCliBin, [
-      "wallet", "limit",
-      "--address", config.circleWalletAddress,
-      "--chain", config.chain,
-      "--output", "json"
-    ]);
-    if (policyCheck.ok) {
-      const parsed = tryParseJson(policyCheck.stdout);
-      results.push({
-        name: "Circle wallet policy",
-        ok: true,
-        message: "Circle wallet policy limits retrieved",
-        details: parsed
-      });
-    } else {
-      results.push({
-        name: "Circle wallet policy",
-        ok: false,
-        message: `Failed: ${policyCheck.stderr.trim().slice(0, 200)}`
-      });
-    }
-
-    // Budget check
-    const budgetCheck = await tryExec(config.circleCliBin, [
-      "wallet", "limit", "budget",
-      "--address", config.circleWalletAddress,
-      "--output", "json"
-    ]);
-    if (budgetCheck.ok) {
-      const parsed = tryParseJson(budgetCheck.stdout);
-      results.push({
-        name: "Circle wallet budget",
-        ok: true,
-        message: "Circle wallet budget (rolling-window) retrieved",
-        details: parsed
-      });
-    } else {
-      results.push({
-        name: "Circle wallet budget",
-        ok: false,
-        message: `Failed: ${budgetCheck.stderr.trim().slice(0, 200)}`
-      });
-    }
-
-    // Policy comparison (Runner vs Circle)
-    if (policyCheck.ok) {
-      const circlePolicy = parseCirclePolicyLimit(tryParseJson(policyCheck.stdout));
-      const warnings = comparePolicies(config, circlePolicy);
-      results.push({
-        name: "Policy comparison (Runner vs Circle)",
-        ok: warnings.length === 0,
-        message: warnings.length === 0
-          ? "Runner policy is within Circle wallet policy limits"
-          : warnings.join("; "),
-        details: { runnerPolicy: config, circlePolicy, warnings }
-      });
-    }
-  } else {
-    results.push({
-      name: "Circle wallet policy",
-      ok: false,
-      message: !config.circleWalletAddress
-        ? "Skipped: wallet address not configured"
-        : "Skipped: binary not found"
-    });
-  }
+  // 17. Circle wallet ID configured
+  const hasWalletId = typeof config.circleWalletId === "string" && config.circleWalletId.length > 0;
+  results.push({
+    name: "Circle wallet ID",
+    ok: hasWalletId,
+    message: hasWalletId
+      ? `Configured: ${config.circleWalletId}`
+      : "CIRCLE_WALLET_ID not set (required for Circle Dev Wallet)"
+  });
 
   // ══════════════════════════════════════════════════════════════════════
   // RUNTIME CHECKS
@@ -538,85 +345,4 @@ export async function runDoctor(config: RunnerConfig): Promise<CheckResult[]> {
   });
 
   return results;
-}
-
-/**
- * Get Circle wallet policy + budget status for MCP tool.
- */
-export async function getCirclePolicyStatus(config: RunnerConfig): Promise<{
-  ok: boolean;
-  walletAddress?: string;
-  chain?: string;
-  runnerPolicy: Record<string, unknown>;
-  circlePolicy?: unknown;
-  circleBudget?: unknown;
-  warnings: string[];
-}> {
-  const warnings: string[] = [];
-  const runnerPolicy = {
-    perTxLimitUsdc: config.perTxLimitUsdc,
-    dailyLimitUsdc: config.dailyLimitUsdc,
-    monthlyLimitUsdc: config.monthlyLimitUsdc,
-    batchMaxTotalUsdc: config.batchMaxTotalUsdc,
-    paymentEnabled: config.paymentEnabled
-  };
-
-  if (!config.circleWalletAddress) {
-    warnings.push("CIRCLE_WALLET_ADDRESS not configured");
-    return { ok: false, runnerPolicy, warnings };
-  }
-
-  // Skip for unsupported chains
-  if (UNSUPPORTED_POLICY_CHAINS.has(config.chain?.toUpperCase())) {
-    warnings.push(`Chain '${config.chain}' does not support wallet policy checks`);
-    return { ok: true, walletAddress: config.circleWalletAddress, chain: config.chain, runnerPolicy, warnings };
-  }
-
-  // wallet limit (policy caps)
-  let circlePolicy: unknown;
-  const policyResult = await tryExec(config.circleCliBin, [
-    "wallet", "limit",
-    "--address", config.circleWalletAddress,
-    "--chain", config.chain,
-    "--output", "json"
-  ]);
-  if (policyResult.ok) {
-    circlePolicy = tryParseJson(policyResult.stdout);
-    if (!circlePolicy) {
-      warnings.push("Circle wallet policy returned non-JSON output");
-    }
-  } else {
-    warnings.push(`Circle wallet limit failed: ${policyResult.stderr.trim().slice(0, 200)}`);
-  }
-
-  // wallet limit budget
-  let circleBudget: unknown;
-  const budgetResult = await tryExec(config.circleCliBin, [
-    "wallet", "limit", "budget",
-    "--address", config.circleWalletAddress,
-    "--output", "json"
-  ]);
-  if (budgetResult.ok) {
-    circleBudget = tryParseJson(budgetResult.stdout);
-    if (!circleBudget) {
-      warnings.push("Circle wallet budget returned non-JSON output");
-    }
-  } else {
-    warnings.push(`Circle wallet limit budget failed: ${budgetResult.stderr.trim().slice(0, 200)}`);
-  }
-
-  // Policy comparison
-  const parsed = parseCirclePolicyLimit(circlePolicy);
-  const policyWarnings = comparePolicies(config, parsed);
-  warnings.push(...policyWarnings);
-
-  return {
-    ok: warnings.length === 0,
-    walletAddress: config.circleWalletAddress,
-    chain: config.chain,
-    runnerPolicy,
-    circlePolicy,
-    circleBudget,
-    warnings
-  };
 }
