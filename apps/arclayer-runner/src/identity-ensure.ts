@@ -42,6 +42,7 @@ export type IdentityState = {
   idempotencyKey?: string;
   registeredAt?: string;
   confirmedAt?: string;
+  consoleSync?: { status: "pending" | "confirmed"; txHash?: string; metadataURI?: string; walletAddress?: string };
 };
 
 export type RegistrationState = {
@@ -224,7 +225,7 @@ export function mapToCircleIdempotencyKey(arclayerKey: string): string {
  * Check if a wallet already has ERC-8004 identity on-chain.
  * Uses Transfer event log scanning instead of totalSupply (which reverts).
  *
- * Scans Transfer(0x0, wallet, tokenId) events in chunked block ranges,
+ * Scans Transfer(*, wallet, tokenId) events in chunked block ranges,
  * deduplicates tokenIds, and verifies current ownership with ownerOf.
  */
 export async function scanExistingIdentityOnChain(
@@ -279,8 +280,8 @@ export async function scanExistingIdentityOnChain(
           address: registryAddress,
           topics: [
             TRANSFER_TOPIC,
-            pad(ZERO_ADDRESS as `0x${string}`, { size: 32 }), // from = mint (0x0)
-            paddedWallet as `0x${string}`, // to = wallet
+            null,                            // from = any address (wildcard)
+            paddedWallet as `0x${string}`,   // to = wallet
           ],
           fromBlock,
           toBlock,
@@ -337,7 +338,7 @@ export async function scanExistingIdentityOnChain(
     try {
       const logs = await readFns.getLogs({ fromBlock, toBlock });
       for (const log of logs) {
-        // Topic[3] = tokenId (indexed)
+        // Topic[3] = tokenId (indexed) — regardless of whether from was 0x0 (mint) or another address (transfer)
         if (log.topics.length >= 4 && log.topics[3]) {
           const tokenId = BigInt(log.topics[3]).toString();
           tokenIdSet.add(tokenId);
@@ -563,6 +564,31 @@ export async function ensureIdentity(params: {
   const existing = readIdentityState();
 
   if (existing.status === "confirmed" && existing.tokenId) {
+    // Check if Console sync is still pending
+    if (existing.consoleSync?.status === "pending" && params.syncToConsoleFn) {
+      try {
+        const syncResult = await params.syncToConsoleFn(
+          existing.consoleSync.txHash ?? existing.txHash ?? "",
+          existing.consoleSync.walletAddress ?? existing.walletAddress ?? "",
+          existing.consoleSync.metadataURI ?? existing.metadataURI ?? "",
+          params.role,
+          params.agentName,
+        );
+        if (syncResult.ok) {
+          // Sync succeeded — clear pending marker
+          writeIdentityState({ ...existing, consoleSync: { status: "confirmed" } });
+          return { action: "confirmed_onchain", identity: readIdentityState(), message: `Identity confirmed and synced: tokenId=${existing.tokenId}` };
+        }
+        if (syncResult.retryable) {
+          // Still retryable — keep pending marker
+          return { action: "already_pending", identity: existing, message: `Identity confirmed on-chain but Console sync still pending. Re-run to sync roster.` };
+        }
+        // Permanent failure — warn
+        process.stderr.write(`[identity-ensure] Console sync permanent failure: ${syncResult.error}\n`);
+      } catch (err) {
+        process.stderr.write(`[identity-ensure] Console sync error: ${err instanceof Error ? err.message : String(err)}\n`);
+      }
+    }
     return {
       action: "already_confirmed",
       identity: existing,
@@ -597,9 +623,12 @@ export async function ensureIdentity(params: {
             }
 
             if (syncResult.retryable) {
+              // Write durable sync-pending marker
+              const currentState = readIdentityState();
+              writeIdentityState({ ...currentState, consoleSync: { status: "pending", txHash: pending.txHash, metadataURI: pending.metadataURI, walletAddress: pending.walletAddress } });
               return {
                 action: "already_pending",
-                identity: { ...existing, status: "pending", txHash: pending.txHash },
+                identity: readIdentityState(),
                 message: `Identity confirmed on-chain but Console sync pending. Re-run to sync roster.`,
               };
             }
@@ -691,6 +720,16 @@ export async function ensureIdentity(params: {
   // Case: exactly one identity found — reuse it (unless confirmSecondMint=true)
   if (allTokenIds.length === 1 && !(params.confirmSecondMint && params.autoRegister)) {
     const tokenId = allTokenIds[0];
+
+    // P3: If selectedAgentId is set, verify it matches
+    if (params.selectedAgentId && params.selectedAgentId !== tokenId) {
+      return {
+        action: "failed",
+        identity: { status: "none" },
+        message: `ARCLAYER_AGENT_ID=${params.selectedAgentId} does not match wallet-owned ERC-8004 tokenId=${tokenId}. Fix ARCLAYER_AGENT_ID or use the correct wallet.`,
+      };
+    }
+
     const source = onChainIdentities.length > 0 ? "on-chain" : "console-roster";
 
     writeIdentityState({
@@ -871,6 +910,7 @@ export async function ensureIdentity(params: {
             idempotencyKey: arclayerKey,
             registeredAt: new Date().toISOString(),
             confirmedAt: new Date().toISOString(),
+            consoleSync: { status: "confirmed" },
           });
 
           writeRegistrationState({
