@@ -564,6 +564,7 @@ async function main() {
           autoRegister: opts.autoRegister ?? false,
           walletAddress: config.circleWalletAddress,
           confirmSecondMint: opts.confirmSecondMint ?? false,
+          selectedAgentId: config.agentId,
           consoleUrl: process.env.ARCLAYER_CONSOLE_URL,
           syncSecret: process.env.ARCLAYER_RUNNER_SYNC_SECRET,
           registerFn: async (metadataURI: string, idempotencyKey: string) => {
