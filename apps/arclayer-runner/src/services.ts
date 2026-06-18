@@ -1351,7 +1351,7 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
-    const input = body as { metadataURI: string };
+    const input = body as { metadataURI: string; idempotencyKey?: string };
     if (!input.metadataURI) {
       throw new RunnerError("MISSING_FIELD", "metadataURI is required", 400);
     }
@@ -1364,6 +1364,11 @@ export class RunnerServices {
         501,
       );
     }
+
+    // Build idempotency key: prefer caller-provided, derive if missing
+    const idempotencyKey = input.idempotencyKey
+      ?? `erc8004-register:${this.config.circleWalletAddress!.toLowerCase()}:${sha256Json(input.metadataURI)}`;
+
     const result = await this.wallet.executeAllowedArcWrite({
       signature: "register(string)",
       params: [input.metadataURI],
@@ -1371,6 +1376,7 @@ export class RunnerServices {
       address: this.config.circleWalletAddress,
       chain: this.config.chain,
       allowRegister: true,
+      idempotencyKey,
       signal,
     });
 

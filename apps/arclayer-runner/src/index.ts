@@ -429,8 +429,9 @@ async function main() {
           description: opts.description,
           capabilities: opts.capabilities,
           autoRegister: opts.autoRegister ?? false,
-          registerFn: async (metadataURI: string) => {
-            return services.registerIdentityViaWallet({ metadataURI }) as Promise<{
+          walletAddress: config.circleWalletAddress,
+          registerFn: async (metadataURI: string, idempotencyKey: string) => {
+            return services.registerIdentityViaWallet({ metadataURI, idempotencyKey }) as Promise<{
               ok: boolean;
               txHash?: string;
               result?: unknown;

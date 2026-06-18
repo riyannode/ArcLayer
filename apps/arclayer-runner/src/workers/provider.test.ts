@@ -227,4 +227,87 @@ describe("ProviderWorker", () => {
       await expect(worker.runOnce()).rejects.toThrow("ARC-TESTNET");
     });
   });
+
+  describe("setBudget recovery reconciliation", () => {
+    it("reconciles setBudget when on-chain budget is atomic and idempotencyKey has decimal", async () => {
+      const config = makeConfig();
+      const services = makeServices();
+      const mcp = makeMcp();
+      const runtime = makeRuntime();
+
+      // Mock listReconcilableOperations to return a pending setBudget with decimal amount
+      services.listReconcilableOperations = vi.fn().mockReturnValue([
+        {
+          operationId: "op-1",
+          kind: "setBudget",
+          idempotencyKey: "setBudget:100:1.00",
+        },
+      ]);
+
+      // Mock MCP to return on-chain status with atomic budget
+      mcp.callTool = vi.fn()
+        // identity.get_agent_account (verifyIdentity)
+        .mockResolvedValueOnce({ ok: true, tokenId: "42" })
+        // jobs.get_onchain_status (verifyPostcondition)
+        .mockResolvedValueOnce({
+          ok: true,
+          budgetAtomic: "1000000",
+          provider: config.circleWalletAddress,
+        })
+        // provider.list_assigned_jobs_extended (pollFundedJobs — empty)
+        .mockResolvedValueOnce({ jobs: [] })
+        // provider.list_assigned_jobs_extended (pollOpenJobs — empty)
+        .mockResolvedValueOnce({ jobs: [] });
+
+      const worker = createProviderWorker(config, services as any, mcp as any, runtime as any);
+
+      await worker.runOnce();
+
+      // Should reconcile as confirmed (decimal 1.00 → atomic 1000000 matches)
+      expect(services.reconcileOperation).toHaveBeenCalledWith(
+        "op-1",
+        "confirmed",
+        expect.objectContaining({ txHash: undefined, errorMessage: undefined }),
+      );
+    });
+
+    it("reconciles setBudget failure when on-chain budget mismatches", async () => {
+      const config = makeConfig();
+      const services = makeServices();
+      const mcp = makeMcp();
+      const runtime = makeRuntime();
+
+      services.listReconcilableOperations = vi.fn().mockReturnValue([
+        {
+          operationId: "op-2",
+          kind: "setBudget",
+          idempotencyKey: "setBudget:100:1.00",
+        },
+      ]);
+
+      mcp.callTool = vi.fn()
+        .mockResolvedValueOnce({ ok: true, tokenId: "42" })
+        // On-chain budget is 2000000, expected 1000000 (from 1.00)
+        .mockResolvedValueOnce({
+          ok: true,
+          budgetAtomic: "2000000",
+          provider: config.circleWalletAddress,
+        })
+        .mockResolvedValueOnce({ jobs: [] })
+        .mockResolvedValueOnce({ jobs: [] });
+
+      const worker = createProviderWorker(config, services as any, mcp as any, runtime as any);
+
+      await worker.runOnce();
+
+      // Should reconcile as failed (budget mismatch)
+      expect(services.reconcileOperation).toHaveBeenCalledWith(
+        "op-2",
+        "failed",
+        expect.objectContaining({
+          errorMessage: expect.stringContaining("Budget mismatch"),
+        }),
+      );
+    });
+  });
 });

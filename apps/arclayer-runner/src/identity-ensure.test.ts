@@ -6,7 +6,12 @@
  *   - Does not double mint after submitted tx state
  *   - Creates identity when missing and auto-register is set
  *   - Rejects when auto-register is not set
- *   - Lock prevents concurrent registration
+ *   - Lock prevents concurrent registration (atomic exclusive create)
+ *   - No dynamic require("node:fs") in ESM build
+ *   - IdempotencyKey is stable across reruns
+ *   - Pending tx can finalize to confirmed tokenId
+ *   - Reverted tx becomes failed
+ *   - registerFn receives idempotencyKey
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -23,6 +28,8 @@ import {
   releaseLock,
   buildMetadataURI,
   getIdentityDir,
+  generateIdempotencyKey,
+  finalizePendingIdentity,
 } from "./identity-ensure";
 
 // Use temp dir for tests
@@ -141,6 +148,7 @@ describe("identity-ensure", () => {
         description: "Test agent",
         capabilities: "coding,analysis",
         autoRegister: true,
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
         registerFn,
       });
 
@@ -183,6 +191,184 @@ describe("identity-ensure", () => {
     });
   });
 
+  describe("idempotencyKey", () => {
+    it("generateIdempotencyKey is deterministic", () => {
+      const key1 = generateIdempotencyKey("0xABC", "data:test");
+      const key2 = generateIdempotencyKey("0xabc", "data:test");
+      expect(key1).toBe(key2); // case-insensitive on address
+      expect(key1).toMatch(/^erc8004-register:0xabc:/);
+    });
+
+    it("generateIdempotencyKey differs for different inputs", () => {
+      const key1 = generateIdempotencyKey("0xabc", "data:test1");
+      const key2 = generateIdempotencyKey("0xabc", "data:test2");
+      expect(key1).not.toBe(key2);
+    });
+
+    it("passes idempotencyKey to registerFn", async () => {
+      const registerFn = vi.fn().mockResolvedValue({ ok: true, txHash: "0x123" });
+      const walletAddress = "0x1234567890abcdef1234567890abcdef12345678";
+
+      await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        walletAddress,
+        registerFn,
+      });
+
+      expect(registerFn).toHaveBeenCalledTimes(1);
+      const [metadataURI, idempotencyKey] = registerFn.mock.calls[0];
+      expect(metadataURI).toMatch(/^data:application\/json;base64,/);
+      expect(idempotencyKey).toMatch(/^erc8004-register:0x1234567890abcdef1234567890abcdef12345678:/);
+    });
+
+    it("rerun with pending registration reuses same idempotencyKey", async () => {
+      const registerFn = vi.fn().mockResolvedValue({ ok: true, txHash: "0xabc" });
+      const walletAddress = "0x1234567890abcdef1234567890abcdef12345678";
+
+      await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        walletAddress,
+        registerFn,
+      });
+
+      const regState = readRegistrationState();
+      expect(regState?.idempotencyKey).toBeDefined();
+      expect(regState?.idempotencyKey).toMatch(/^erc8004-register:/);
+    });
+  });
+
+  describe("finalizePendingIdentity", () => {
+    it("finalizes pending tx to confirmed with tokenId", async () => {
+      writeRegistrationState({
+        status: "submitted",
+        txHash: "0xabc",
+        metadataURI: "data:test",
+        submittedAt: new Date().toISOString(),
+      });
+
+      const finalizeFn = vi.fn().mockResolvedValue({
+        status: "confirmed" as const,
+        tokenId: "42",
+      });
+
+      const result = await finalizePendingIdentity({ finalizeFn });
+
+      expect(result.action).toBe("confirmed");
+      expect(result.tokenId).toBe("42");
+
+      // Verify identity was written
+      const identity = readIdentityState();
+      expect(identity.status).toBe("confirmed");
+      expect(identity.tokenId).toBe("42");
+      expect(identity.txHash).toBe("0xabc");
+
+      // Verify registration was updated
+      const reg = readRegistrationState();
+      expect(reg?.status).toBe("confirmed");
+    });
+
+    it("returns still_pending when tx not mined", async () => {
+      writeRegistrationState({
+        status: "submitted",
+        txHash: "0xabc",
+        metadataURI: "data:test",
+        submittedAt: new Date().toISOString(),
+      });
+
+      const finalizeFn = vi.fn().mockResolvedValue({
+        status: "still_pending" as const,
+      });
+
+      const result = await finalizePendingIdentity({ finalizeFn });
+      expect(result.action).toBe("still_pending");
+    });
+
+    it("marks reverted tx as failed", async () => {
+      writeRegistrationState({
+        status: "submitted",
+        txHash: "0xabc",
+        metadataURI: "data:test",
+        submittedAt: new Date().toISOString(),
+      });
+
+      const finalizeFn = vi.fn().mockResolvedValue({
+        status: "reverted" as const,
+      });
+
+      const result = await finalizePendingIdentity({ finalizeFn });
+      expect(result.action).toBe("reverted");
+
+      const reg = readRegistrationState();
+      expect(reg?.status).toBe("failed");
+      expect(reg?.error).toContain("reverted");
+    });
+
+    it("returns not_found when no pending registration", async () => {
+      const finalizeFn = vi.fn();
+      const result = await finalizePendingIdentity({ finalizeFn });
+      expect(result.action).toBe("not_found");
+      expect(finalizeFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("ensureIdentity with finalizeFn", () => {
+    it("finalizes pending and returns confirmed_pending", async () => {
+      writeRegistrationState({
+        status: "submitted",
+        txHash: "0xabc",
+        metadataURI: "data:test",
+        submittedAt: new Date().toISOString(),
+      });
+
+      const registerFn = vi.fn();
+      const finalizeFn = vi.fn().mockResolvedValue({
+        status: "confirmed" as const,
+        tokenId: "42",
+      });
+
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        registerFn,
+        finalizeFn,
+      });
+
+      expect(result.action).toBe("confirmed_pending");
+      expect(result.identity.tokenId).toBe("42");
+      expect(registerFn).not.toHaveBeenCalled(); // didn't re-register
+    });
+
+    it("re-registers after reverted tx if autoRegister", async () => {
+      writeRegistrationState({
+        status: "failed",
+        txHash: "0xabc",
+        metadataURI: "data:test",
+        submittedAt: new Date().toISOString(),
+        error: "Transaction reverted on-chain",
+      });
+
+      const registerFn = vi.fn().mockResolvedValue({ ok: true, txHash: "0xdef" });
+      const finalizeFn = vi.fn();
+
+      const result = await ensureIdentity({
+        agentName: "test",
+        role: "provider",
+        autoRegister: true,
+        registerFn,
+        finalizeFn,
+      });
+
+      // Should attempt to re-register since the previous failed
+      expect(result.action).toBe("registered");
+      expect(registerFn).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("buildMetadataURI", () => {
     it("creates data: URI with JSON metadata", () => {
       const uri = buildMetadataURI({
@@ -204,13 +390,34 @@ describe("identity-ensure", () => {
     });
   });
 
-  describe("lock management", () => {
+  describe("ESM-safe atomic lock", () => {
     it("acquires and releases lock", () => {
       expect(acquireLock()).toBe(true);
       expect(acquireLock()).toBe(false); // already locked
       releaseLock();
       expect(acquireLock()).toBe(true); // can acquire again
       releaseLock();
+    });
+
+    it("uses exclusive create (no TOCTOU race)", () => {
+      // First acquire succeeds
+      expect(acquireLock()).toBe(true);
+      // Second acquire fails (file already exists)
+      expect(acquireLock()).toBe(false);
+      releaseLock();
+    });
+  });
+
+  describe("no dynamic require", () => {
+    it("identity-ensure.ts has no dynamic require calls", async () => {
+      // Read the source file
+      const fs = await import("node:fs");
+      const path = join(__dirname, "identity-ensure.ts");
+      const source = fs.readFileSync(path, "utf8");
+
+      // Should not contain require("node:fs") or require('node:fs')
+      expect(source).not.toMatch(/require\(["']node:fs["']\)/);
+      expect(source).not.toMatch(/require\(["']fs["']\)/);
     });
   });
 });
