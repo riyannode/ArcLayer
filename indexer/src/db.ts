@@ -13,6 +13,7 @@ import {
 } from "./a2a-lifecycle-sync";
 import { projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
 import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS, ARC_ERC8004_REPUTATION_ADDRESS } from "./config";
+import { initInboxTable, enqueueFromEvents, claimInboxItem, completeInboxItem, failInboxItem, reconcileFromIndexer, readInboxStats, type ClaimInput, type ClaimResult, type ProviderInboxItem } from "./inbox";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arclayer-indexer.sqlite");
@@ -151,6 +152,22 @@ db.exec(`
     latest_reviewer TEXT NOT NULL,
     latest_tx_hash TEXT NOT NULL,
     latest_block_number TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`);
+
+initInboxTable(db);
+
+// ── Failed log ranges (adaptive getLogs persistence) ────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS failed_log_ranges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_block INTEGER NOT NULL,
+    to_block INTEGER NOT NULL,
+    reason TEXT,
+    retry_count INTEGER DEFAULT 0,
+    next_retry_at TEXT,
+    created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
 `);
@@ -503,6 +520,13 @@ export async function syncProjectionStore(
     const storedAgentEvents = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events`).get() as { count: number }).count;
     const storedReputationEvents = (db.prepare(`SELECT COUNT(*) AS count FROM reputation_events`).get() as { count: number }).count;
     upsertMeta.run("event_count", String(storedJobEvents + storedAgentEvents + storedReputationEvents));
+    // Enqueue actionable items into provider inbox
+    try {
+      const inboxEnqueued = enqueueFromEvents(db, events as any);
+      if (inboxEnqueued > 0) console.log(`[indexer] inbox: enqueued ${inboxEnqueued} items`);
+    } catch (inboxErr) {
+      console.warn("[indexer] inbox enqueue warning:", inboxErr instanceof Error ? inboxErr.message : inboxErr);
+    }
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -1055,3 +1079,60 @@ export function readErc8183ReputationAll(): Erc8183ProviderReputation[] {
 
   return results.sort((a, b) => b.score - a.score);
 }
+
+// ── Failed Log Ranges ───────────────────────────────────────────────────────
+
+export function insertFailedRange(fromBlock: number, toBlock: number, reason: string): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO failed_log_ranges (from_block, to_block, reason, retry_count, next_retry_at, created_at, updated_at)
+    VALUES (?, ?, ?, 0, ?, ?, ?)
+  `).run(fromBlock, toBlock, reason, now, now, now);
+}
+
+export type FailedRange = {
+  id: number;
+  fromBlock: number;
+  toBlock: number;
+  reason: string;
+  retryCount: number;
+  nextRetryAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function getFailedRangesForRetry(limit: number = 2): FailedRange[] {
+  const now = new Date().toISOString();
+  return db.prepare(`
+    SELECT * FROM failed_log_ranges
+    WHERE retry_count < 5 AND (next_retry_at IS NULL OR next_retry_at <= ?)
+    ORDER BY created_at ASC
+    LIMIT ?
+  `).all(now, limit).map((row: any) => ({
+    id: row.id as number,
+    fromBlock: row.from_block as number,
+    toBlock: row.to_block as number,
+    reason: row.reason as string,
+    retryCount: row.retry_count as number,
+    nextRetryAt: row.next_retry_at as string,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  }));
+}
+
+export function updateFailedRangeRetry(id: number): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE failed_log_ranges
+    SET retry_count = retry_count + 1, updated_at = ?
+    WHERE id = ?
+  `).run(now, id);
+}
+
+export function deleteFailedRange(id: number): void {
+  db.prepare(`DELETE FROM failed_log_ranges WHERE id = ?`).run(id);
+}
+
+// ── Re-export inbox functions for server ─────────────────────────────────
+export { claimInboxItem, completeInboxItem, failInboxItem, reconcileFromIndexer, readInboxStats, type ClaimInput, type ClaimResult, type ProviderInboxItem } from "./inbox";
+export function getDb() { return db; }

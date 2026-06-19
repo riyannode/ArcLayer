@@ -39,6 +39,16 @@ import {
   readErc8183ReputationAll,
   syncProjectionStore,
   writeMetaValue,
+  claimInboxItem,
+  completeInboxItem,
+  failInboxItem,
+  reconcileFromIndexer,
+  readInboxStats,
+  getDb,
+  insertFailedRange,
+  getFailedRangesForRetry,
+  updateFailedRangeRetry,
+  deleteFailedRange,
 } from "./db";
 
 
@@ -61,6 +71,15 @@ let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
 
 
+
+function readBody(req: import("node:http").IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
+}
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
@@ -121,19 +140,51 @@ export async function runSyncCycle() {
     const reputationToBlock = calculateToBlock(reputationFromBlock, chainLatestBlock, MAX_BLOCK_RANGE);
 
     let events: Awaited<ReturnType<typeof fetchJobEvents>>["events"] = [];
+    let allFailedRanges: Array<{fromBlock: bigint, toBlock: bigint, reason: string}> = [];
     if (INDEX_ARC_REFERENCE_ERC8183) {
-      events = (await fetchJobEvents(fromBlock, toBlock)).events;
+      const jobResult = await fetchJobEvents(fromBlock, toBlock);
+      events = jobResult.events;
+      if (jobResult.failedRanges) allFailedRanges.push(...jobResult.failedRanges);
     }
 
     let agentEvts: Awaited<ReturnType<typeof fetchAgentEvents>>["events"] = [];
     if (INDEX_ARC_REFERENCE_ERC8004) {
-      agentEvts = (await fetchAgentEvents(agentFromBlock, agentToBlock)).events;
+      const agentResult = await fetchAgentEvents(agentFromBlock, agentToBlock);
+      agentEvts = agentResult.events;
+      if (agentResult.failedRanges) allFailedRanges.push(...agentResult.failedRanges);
     }
 
     let reputationEvts: Awaited<ReturnType<typeof fetchReputationEvents>>["events"] = [];
     if (INDEX_ARC_REFERENCE_ERC8004_REPUTATION) {
-      reputationEvts = (await fetchReputationEvents(reputationFromBlock, reputationToBlock)).events;
+      const repResult = await fetchReputationEvents(reputationFromBlock, reputationToBlock);
+      reputationEvts = repResult.events;
+      if (repResult.failedRanges) allFailedRanges.push(...repResult.failedRanges);
     }
+
+    // Persist failed ranges for later retry
+    for (const fr of allFailedRanges) {
+      try {
+        insertFailedRange(Number(fr.fromBlock), Number(fr.toBlock), fr.reason);
+      } catch { /* already persisted or table issue */ }
+    }
+
+    // Retry 1-2 previously failed ranges
+    try {
+      const retryRanges = getFailedRangesForRetry(2);
+      for (const rr of retryRanges) {
+        try {
+          const retryResult = await fetchJobEvents(BigInt(rr.fromBlock), BigInt(rr.toBlock));
+          events.push(...retryResult.events);
+          if (!retryResult.failedRanges || retryResult.failedRanges.length === 0) {
+            deleteFailedRange(rr.id);
+          } else {
+            updateFailedRangeRetry(rr.id);
+          }
+        } catch {
+          updateFailedRangeRetry(rr.id);
+        }
+      }
+    } catch { /* failed range retry is best-effort */ }
 
     console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${agentEvts.length} reputation=${reputationEvts.length} block=${toBlock} agentBlock=${agentToBlock} reputationBlock=${reputationToBlock}`);
 
@@ -176,7 +227,7 @@ async function startPollingLoop() {
 
 startPollingLoop();
 
-createServer((req, res) => {
+createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -407,10 +458,142 @@ createServer((req, res) => {
     return;
   }
 
+
+  // ── Provider Inbox: Claim ──────────────────────────────────────────────
+  if (url.pathname === "/provider/inbox/claim" && req.method === "POST") {
+    const body = await readBody(req);
+    try {
+      const input = JSON.parse(body);
+      const provider = input.provider || "";
+      if (!provider) {
+        res.statusCode = 400;
+        writeJson(res, { ok: false, error: "provider required" });
+        return;
+      }
+      const result = await claimInboxItem(getDb(), {
+        provider,
+        agentId: input.agentId,
+        limit: input.limit,
+        leaseMs: input.leaseMs,
+        waitMs: input.waitMs,
+      });
+      if (!result.ok) {
+        writeJson(res, { ok: false, error: "no pending items" });
+        return;
+      }
+      console.log(`[provider-inbox] claim job=${result.item!.jobId} action=${result.item!.action} lease=${result.item!.leaseId}`);
+      writeJson(res, { ok: true, item: result.item });
+    } catch (err) {
+      res.statusCode = 400;
+      writeJson(res, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // ── Provider Inbox: Complete ───────────────────────────────────────────
+  if (url.pathname === "/provider/inbox/complete" && req.method === "POST") {
+    const body = await readBody(req);
+    try {
+      const input = JSON.parse(body);
+      if (!input.id || !input.leaseId) {
+        res.statusCode = 400;
+        writeJson(res, { ok: false, error: "id and leaseId required" });
+        return;
+      }
+      const result = completeInboxItem(getDb(), input.id, input.leaseId, input.result);
+      if (!result.ok) {
+        res.statusCode = 409;
+        writeJson(res, result);
+        return;
+      }
+      console.log(`[provider-inbox] complete job=${input.jobId ?? input.id} result=${JSON.stringify(input.result ?? {})}`);
+      writeJson(res, { ok: true });
+    } catch (err) {
+      res.statusCode = 400;
+      writeJson(res, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // ── Provider Inbox: Fail ───────────────────────────────────────────────
+  if (url.pathname === "/provider/inbox/fail" && req.method === "POST") {
+    const body = await readBody(req);
+    try {
+      const input = JSON.parse(body);
+      if (!input.id || !input.leaseId) {
+        res.statusCode = 400;
+        writeJson(res, { ok: false, error: "id and leaseId required" });
+        return;
+      }
+      const result = failInboxItem(getDb(), input.id, input.leaseId, input.error ?? "unknown", input.retryAfterMs);
+      if (!result.ok) {
+        res.statusCode = 409;
+        writeJson(res, result);
+        return;
+      }
+      console.log(`[provider-inbox] fail job=${input.jobId ?? input.id} retryAfter=${input.retryAfterMs ?? "permanent"}`);
+      writeJson(res, { ok: true });
+    } catch (err) {
+      res.statusCode = 400;
+      writeJson(res, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // -- Sync: Range --------------------------------------------------------
+  if (url.pathname === "/sync/range" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const input = JSON.parse(body);
+      const from = BigInt(input.fromBlock);
+      const to = BigInt(input.toBlock);
+      const result = await fetchJobEvents(from, to);
+      await syncProjectionStore(result.events, [], []);
+      writeJson(res, { ok: true, fromBlock: from.toString(), toBlock: to.toString(), events: result.events.length });
+    } catch (e) {
+      res.statusCode = 400;
+      writeJson(res, { ok: false, error: String(e) });
+    }
+    return;
+  }
+
+  if (url.pathname === "/provider/inbox/reconcile" && req.method === "POST") {
+    const body = await readBody(req);
+    try {
+      const input = JSON.parse(body);
+      const provider = input.provider || "";
+      if (!provider) {
+        res.statusCode = 400;
+        writeJson(res, { ok: false, error: "provider required" });
+        return;
+      }
+      const result = reconcileFromIndexer(getDb(), provider);
+      console.log(`[provider-inbox] reconcile provider=${provider} enqueued=${result.enqueued} stale=${result.staleMarked}`);
+      writeJson(res, { ok: true, ...result });
+    } catch (err) {
+      res.statusCode = 400;
+      writeJson(res, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // ── Provider Inbox: Stats ──────────────────────────────────────────────
+  if (url.pathname === "/provider/inbox/stats") {
+    const provider = url.searchParams.get("provider") || "";
+    if (!provider) {
+      res.statusCode = 400;
+      writeJson(res, { ok: false, error: "provider query param required" });
+      return;
+    }
+    writeJson(res, { ok: true, stats: readInboxStats(getDb(), provider) });
+    return;
+  }
+
+
   writeJson(res, {
     ok: true,
     mode: "arc-reference-100%",
-    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/open", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/reputation", "/reputation/:agentTokenId", "/erc8183-reputation", "/erc8183-reputation/:providerAddress"],
+    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/open", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/reputation", "/reputation/:agentTokenId", "/erc8183-reputation", "/erc8183-reputation/:providerAddress", "/provider/inbox/claim", "/provider/inbox/complete", "/provider/inbox/fail", "/provider/inbox/reconcile", "/provider/inbox/stats", "/sync/range"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
     lastSyncedAgentBlock: readMetaValue("last_synced_agent_block"),

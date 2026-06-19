@@ -177,6 +177,105 @@ async function fetchJobsFromIndexer(): Promise<IndexerJob[]> {
   return jobs.filter((j) => j.status >= 0 && j.status <= 2);
 }
 
+
+
+// ── Inbox Client ─────────────────────────────────────────────────────────
+
+type InboxItem = {
+  id: string;
+  providerWallet: string;
+  agentId?: string;
+  jobId: string;
+  eventKind: string;
+  action: "set_budget" | "run_and_submit" | "observe" | "skip";
+  status: string;
+  priority: number;
+  leaseId?: string;
+  lockedBy?: string;
+  lockedAt?: string;
+  payloadJson?: unknown;
+  createdAt: string;
+  updatedAt: string;
+  expiryAt: string;
+};
+
+async function inboxClaim(): Promise<InboxItem | null> {
+  try {
+    const res = await fetch(`${INDEXER_URL}/provider/inbox/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: PROVIDER_WALLET,
+        agentId: AGENT_ID,
+        limit: 1,
+        leaseMs: 120_000,
+        waitMs: 30_000,
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ok: boolean; item?: InboxItem };
+    return data.ok && data.item ? data.item : null;
+  } catch {
+    return null;
+  }
+}
+
+async function inboxComplete(
+  id: string,
+  leaseId: string,
+  jobId: string,
+  result?: Record<string, unknown>
+): Promise<void> {
+  try {
+    await fetch(`${INDEXER_URL}/provider/inbox/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, leaseId, jobId, result }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    // non-fatal
+  }
+}
+
+async function inboxFail(
+  id: string,
+  leaseId: string,
+  error: string,
+  retryAfterMs?: number
+): Promise<void> {
+  try {
+    await fetch(`${INDEXER_URL}/provider/inbox/fail`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, leaseId, error, retryAfterMs }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    // non-fatal
+  }
+}
+
+async function inboxReconcile(): Promise<void> {
+  try {
+    const res = await fetch(`${INDEXER_URL}/provider/inbox/reconcile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: PROVIDER_WALLET }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { enqueued?: number; staleMarked?: number };
+      if ((data.enqueued ?? 0) > 0 || (data.staleMarked ?? 0) > 0) {
+        log(`[provider-inbox] reconcile: enqueued=${data.enqueued} stale=${data.staleMarked}`);
+      }
+    }
+  } catch {
+    // non-fatal
+  }
+}
+
 // ── Stage Lock (file-based, crash-safe) ───────────────────────────────────
 
 function stageLockPath(jobId: string, stage: string): string {
@@ -881,86 +980,204 @@ export async function runLiveDriver(): Promise<void> {
     log(`[live] WARNING: runner health check failed: ${err}`);
   }
 
+
+  // ── Reconcile timer (low-frequency fallback every 5 min) ─────────────
+  const RECONCILE_INTERVAL_MS = 5 * 60_000;
+  let lastReconcile = 0;
+
   while (!shuttingDown) {
     try {
-      const jobs = await fetchJobsFromIndexer();
+      // Periodic reconcile from indexer state (catches missed inbox rows)
+      const now = Date.now();
+      if (now - lastReconcile > RECONCILE_INTERVAL_MS) {
+        await inboxReconcile();
+        lastReconcile = now;
+      }
 
-      if (jobs.length === 0) {
-        log("[live] idle: no active jobs");
+      // Claim one actionable item from inbox
+      const item = await inboxClaim();
+
+      if (!item) {
+        log("[live] idle: no pending inbox items");
       } else {
-        // Classify and prioritize: Funded > Open-has-budget > Open-set-budget > skip
-        const funded: IndexerJob[] = [];
-        const openHasBudget: IndexerJob[] = [];
-        const openSetBudget: IndexerJob[] = [];
-        let skippedTerminal = 0;
-        let skippedCooldown = 0;
+        log(`[provider-inbox] claim job=${item.jobId} action=${item.action} lease=${item.leaseId} priority=${item.priority}`);
 
-        for (const job of jobs) {
-          const pri = classifyJob(job);
-          switch (pri) {
-            case "funded_ready":
-              funded.push(job);
-              break;
-            case "open_has_budget":
-              openHasBudget.push(job);
-              break;
-            case "open_set_budget":
-              openSetBudget.push(job);
-              break;
-            case "skip":
-              if (job.status >= 3) skippedTerminal++;
-              else skippedCooldown++;
-              break;
-          }
+        if (DRAIN_MODE) {
+          log(`[drain] job ${item.jobId}: would execute ${item.action}`);
+          await inboxComplete(item.id, item.leaseId!, item.jobId, { drain: true });
+          continue;
         }
 
-        const prioritized = [...funded, ...openHasBudget, ...openSetBudget];
+        if (item.action === "set_budget") {
+          // ── Set Budget ─────────────────────────────────────────────────
+          const jobId = item.jobId;
+          if (isStageDone(jobId, "set_budget")) {
+            log(`[provider-inbox] complete job=${jobId} action=set_budget (already done)`);
+            await inboxComplete(item.id, item.leaseId!, jobId, { skipped: "already_done" });
+            continue;
+          }
 
-        log(
-          `[live] ${jobs.length} active: ${funded.length} funded, ${openHasBudget.length} waiting-fund, ${openSetBudget.length} need-budget, ${skippedTerminal} terminal, ${skippedCooldown} cooldown/blocked`
-        );
+          if (isStageInCooldown(jobId, "set_budget")) {
+            log(`[provider-inbox] fail job=${jobId} action=set_budget (cooldown)`);
+            await inboxFail(item.id, item.leaseId!, "in cooldown", STAGE_RETRY_COOLDOWN_MS);
+            continue;
+          }
 
-        if (prioritized.length === 0) {
-          log(`[live] no_actionable_jobs: ${skippedTerminal} terminal, ${skippedCooldown} cooldown/blocked`);
-        } else {
-          let productiveAction = false;
-          for (const job of prioritized) {
-            if (shuttingDown) break;
-            try {
-              const result = await processJob(job);
-              log(
-                `[live] job ${job.id}: ${result.stage} → ${result.status} — ${result.detail}`
-              );
-              // Only stop cycle after a PRODUCTIVE write action
-              const isProductive =
-                result.status === "done" ||
-                result.status === "failed" ||
-                (result.status === "waiting" &&
-                  result.stage !== "skip" &&
-                  !result.detail.includes("cooldown"));
-              if (isProductive) {
-                productiveAction = true;
-                log(`[live] cycle action for job ${job.id} (${result.status}), ending cycle`);
-                break;
+          // Check on-chain budget
+          if (isOnChainExisting(jobId)) {
+            await inboxComplete(item.id, item.leaseId!, jobId, { skipped: "budget_on_chain" });
+            continue;
+          }
+
+          const budgetCheck = await checkOnChainBudget(jobId);
+          if (budgetCheck.hasBudget) {
+            markOnChainExisting(jobId, budgetCheck.budgetAtomic, budgetCheck.budgetUsdc);
+            await inboxComplete(item.id, item.leaseId!, jobId, { skipped: "budget_on_chain", budgetUsdc: budgetCheck.budgetUsdc });
+            continue;
+          }
+
+          log(`[live] job ${jobId}: setting budget ${EFFECTIVE_BUDGET} USDC (requested ${REQUESTED_BUDGET}, cap ${MAX_BUDGET})`);
+          try {
+            const result = (await runnerPost("/erc8183/provider/set-budget", {
+              jobId,
+              amount: EFFECTIVE_BUDGET,
+              complexity: "low",
+              reason: `autonomous provider ${AGENT_ID} budget for job ${jobId}`,
+            })) as Record<string, unknown>;
+
+            const resultOk = result["ok"] !== false;
+            const txHash = String(result["txHash"] ?? (result["receipt"] as Record<string, unknown>)?.["txHash"] ?? "");
+            const operationState = String((result["receipt"] as Record<string, unknown>)?.["operationState"] ?? "");
+
+            if (!resultOk || operationState === "failed") {
+              const failMsg = String(result["error"] ?? result["message"] ?? "setBudget returned ok=false");
+              log(`[live] job ${jobId}: set_budget FAILED: ${failMsg}`);
+              markStageWaiting(jobId, "set_budget", failMsg);
+              await inboxFail(item.id, item.leaseId!, failMsg, STAGE_RETRY_COOLDOWN_MS);
+              continue;
+            }
+
+            if (!txHash) {
+              const recheck = await checkOnChainBudget(jobId);
+              if (recheck.hasBudget) {
+                markOnChainExisting(jobId, recheck.budgetAtomic, recheck.budgetUsdc);
+                markStageDone(jobId, "set_budget", { source: "onchain_recheck", budgetUsdc: recheck.budgetUsdc });
+                await inboxComplete(item.id, item.leaseId!, jobId, { txHash: "confirmed_on_chain", budgetUsdc: recheck.budgetUsdc });
+                continue;
               }
-              // Skipped/waiting(cooldown) → continue to next job
+              markStageWaiting(jobId, "set_budget", "no txHash and budget not on-chain");
+              await inboxFail(item.id, item.leaseId!, "no txHash and budget not on-chain", STAGE_RETRY_COOLDOWN_MS);
+              continue;
+            }
+
+            markStageDone(jobId, "set_budget", { txHash, amount: EFFECTIVE_BUDGET });
+            log(`[live] job ${jobId}: budget set, tx=${txHash}`);
+            await inboxComplete(item.id, item.leaseId!, jobId, { txHash });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg.includes("IDEMPOTENCY_CONFLICT") || msg.includes("idempotency")) {
+              const recheck = await checkOnChainBudget(jobId);
+              if (recheck.hasBudget) {
+                markOnChainExisting(jobId, recheck.budgetAtomic, recheck.budgetUsdc);
+                await inboxComplete(item.id, item.leaseId!, jobId, { resolved: "idempotency_conflict_on_chain" });
+                continue;
+              }
+              await inboxFail(item.id, item.leaseId!, "IDEMPOTENCY_CONFLICT_RECONCILE_REQUIRED", STAGE_RETRY_COOLDOWN_MS);
+              continue;
+            }
+            log(`[live] job ${jobId}: set_budget ERROR: ${msg}`);
+            await inboxFail(item.id, item.leaseId!, msg, STAGE_RETRY_COOLDOWN_MS);
+          }
+
+        } else if (item.action === "run_and_submit") {
+          // ── Run + Submit ───────────────────────────────────────────────
+          const jobId = item.jobId;
+          if (isStageDone(jobId, "submit")) {
+            log(`[provider-inbox] complete job=${jobId} action=run_and_submit (already submitted)`);
+            await inboxComplete(item.id, item.leaseId!, jobId, { skipped: "already_submitted" });
+            continue;
+          }
+
+          // run_only
+          if (!isStageDone(jobId, "run_only")) {
+            if (isStageInCooldown(jobId, "run_only")) {
+              await inboxFail(item.id, item.leaseId!, "run_only in cooldown", STAGE_RETRY_COOLDOWN_MS);
+              continue;
+            }
+
+            log(`[live] job ${jobId}: running (run_only)`);
+            try {
+              const jobData = (item.payloadJson as Record<string, unknown>) ?? {};
+              const input = jobData.description || jobData.input || `Process job ${jobId} and generate a deliverable.`;
+              const result = (await runnerPost("/erc8183/provider/run-only", {
+                jobId,
+                input: typeof input === "string" ? input : `Process job ${jobId}`,
+                agentId: AGENT_ID,
+                complexity: "medium",
+              })) as Record<string, unknown>;
+
+              const deliverableHash = String(result["deliverableHash"] ?? "");
+              if (!deliverableHash || deliverableHash === "undefined") {
+                const failMsg = String(result["error"] ?? "no deliverableHash in response");
+                log(`[live] job ${jobId}: run_only FAILED: ${failMsg}`);
+                markStageWaiting(jobId, "run_only", failMsg);
+                await inboxFail(item.id, item.leaseId!, `run_only: ${failMsg}`, STAGE_RETRY_COOLDOWN_MS);
+                continue;
+              }
+
+              markStageDone(jobId, "run_only", { deliverableHash });
+              log(`[live] job ${jobId}: run_only done, hash=${deliverableHash.slice(0, 18)}...`);
             } catch (err) {
-              log(
-                `[live] job ${job.id}: UNEXPECTED: ${err instanceof Error ? err.message : err}`
-              );
-              productiveAction = true;
-              break;
+              const msg = err instanceof Error ? err.message : String(err);
+              log(`[live] job ${jobId}: run_only ERROR: ${msg}`);
+              markStageWaiting(jobId, "run_only", msg);
+              await inboxFail(item.id, item.leaseId!, `run_only: ${msg}`, STAGE_RETRY_COOLDOWN_MS);
+              continue;
             }
           }
-          if (!productiveAction && prioritized.length > 0) {
-            log(`[live] no productive action this cycle (${prioritized.length} checked)`);
+
+          // submit
+          if (!isStageDone(jobId, "submit")) {
+            if (isStageInCooldown(jobId, "submit")) {
+              await inboxFail(item.id, item.leaseId!, "submit in cooldown", STAGE_RETRY_COOLDOWN_MS);
+              continue;
+            }
+
+            const runData = readStageData(jobId, "run_only");
+            const deliverableHash = String(runData["deliverableHash"] ?? "");
+            if (!deliverableHash) {
+              await inboxFail(item.id, item.leaseId!, "no deliverableHash from run_only", STAGE_RETRY_COOLDOWN_MS);
+              continue;
+            }
+
+            log(`[live] job ${jobId}: submitting deliverable`);
+            try {
+              const result = (await runnerPost("/erc8183/provider/submit", {
+                jobId,
+                deliverableHash,
+                agentId: AGENT_ID,
+              })) as Record<string, unknown>;
+
+              const txHash = String(result["txHash"] ?? (result["receipt"] as Record<string, unknown>)?.["txHash"] ?? "");
+              markStageDone(jobId, "submit", { txHash: txHash || "submitted", deliverableHash });
+              log(`[live] job ${jobId}: submitted, tx=${txHash || "(no txHash)"}`);
+              await inboxComplete(item.id, item.leaseId!, jobId, { txHash, deliverableHash });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              log(`[live] job ${jobId}: submit ERROR: ${msg}`);
+              markStageWaiting(jobId, "submit", msg);
+              await inboxFail(item.id, item.leaseId!, `submit: ${msg}`, STAGE_RETRY_COOLDOWN_MS);
+            }
           }
+
+        } else {
+          // observe / skip — complete immediately
+          log(`[provider-inbox] complete job=${item.jobId} action=${item.action} (observed/skipped)`);
+          await inboxComplete(item.id, item.leaseId!, item.jobId, { observed: true });
         }
       }
     } catch (err) {
-      log(
-        `[live] poll error: ${err instanceof Error ? err.message : err}`
-      );
+      log(`[live] poll error: ${err instanceof Error ? err.message : err}`);
     }
 
     await new Promise<void>((resolve) => {
@@ -975,9 +1192,6 @@ export async function runLiveDriver(): Promise<void> {
   log("[live] driver stopped");
 }
 
-process.on("SIGINT", () => {
-  shuttingDown = true;
-});
-process.on("SIGTERM", () => {
-  shuttingDown = true;
-});
+process.on("SIGINT", () => { shuttingDown = true; });
+process.on("SIGTERM", () => { shuttingDown = true; });
+
