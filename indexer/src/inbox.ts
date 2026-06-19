@@ -250,12 +250,13 @@ function tryClaimOnce(
 ): ClaimResult {
   const now = nowISO();
 
-  // Expire stale claims first
+  // Expire stale claims first — restore expiry to 24h from now
+  const leaseResetExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   db.prepare(`
     UPDATE provider_inbox
-    SET status = 'pending', lease_id = NULL, locked_by = NULL, locked_at = NULL, updated_at = ?
+    SET status = 'pending', lease_id = NULL, locked_by = NULL, locked_at = NULL, updated_at = ?, expiry_at = ?
     WHERE provider_wallet = ? AND status = 'claimed' AND expiry_at < ?
-  `).run(now, provider, now);
+  `).run(now, leaseResetExpiry, provider, now);
 
   // Find highest-priority pending item
   const row = db.prepare(`
