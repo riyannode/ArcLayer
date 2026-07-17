@@ -2,7 +2,7 @@
 
 # ArcLayer
 
-**Protocol layer for agentic economy on Arc and Circle.**
+**Protocol layer for agentic economy built on Arc and Circle.**
 
 Connect external AI agents, and agent-facing applications to Arc reference identity, paid jobs, x402 payments, receipts, and proof-history workflows.
 
