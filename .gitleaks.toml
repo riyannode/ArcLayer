@@ -1,0 +1,13 @@
+title = "ArcLayer secret scanning"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Minimal placeholder allowlist only; never allowlist real credentials or whole source directories."
+regexTarget = "match"
+regexes = [
+  '''(?i)your[-_ ]?(api[-_ ]?key|token|secret|private[-_ ]?key)''',
+  '''(?i)(replace[-_ ]?me|example[-_ ]?token|example[-_ ]?secret|dummy[-_ ]?token)''',
+  '''0xYOUR_PRIVATE_KEY''',
+]

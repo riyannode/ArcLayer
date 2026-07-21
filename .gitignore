@@ -19,8 +19,22 @@ build/
 # Environment
 .env
 .env.*
-!.env.*.example
 !.env.example
+!.env.*.example
+
+# Secret material
+*.pem
+*.p12
+*.pfx
+*.key
+*.keystore
+*.keystore.json
+*.secret
+*.secrets
+credentials.json
+service-account.json
+*.bak
+*.backup
 
 # IDE
 .vscode/
