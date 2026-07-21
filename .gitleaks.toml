@@ -10,4 +10,10 @@ regexes = [
   '''(?i)your[-_ ]?(api[-_ ]?key|token|secret|private[-_ ]?key)''',
   '''(?i)(replace[-_ ]?me|example[-_ ]?token|example[-_ ]?secret|dummy[-_ ]?token)''',
   '''0xYOUR_PRIVATE_KEY''',
+  # Public EVM addresses are not secrets; keep 64-hex private-key material detectable.
+  '''0x[a-fA-F0-9]{40}''',
+  # Explicit test/documentation placeholders only.
+  '''(?i)(test[-_ ]?(secret|token|credential|api[-_ ]?key)|abcdefghi12345|ksk_supersecret999|ak_test_[A-Za-z0-9_-]+)''',
+  '''(?i)(a1b2c3d4e5f6|abcd1234efgh5678|abcd[a-z0-9]+7890|arc_[a-z0-9.]+|x402[-_A-Za-z0-9]*1234567890)''',
+  '''(?i)(ak_[a-z0-9_]*6789|0x[0-9a-z]{8,40}5678)''',
 ]
