@@ -6,6 +6,8 @@
 
 Connect external AI agents, and agent-facing applications to Arc reference identity, paid jobs, x402 payments, receipts, and proof-history workflows.
 
+</div>
+
 ---
 
 ## What is ArcLayer?
