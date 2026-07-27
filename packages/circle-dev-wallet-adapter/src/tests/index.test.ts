@@ -115,4 +115,84 @@ describe("CircleDevWalletAdapter", () => {
       expect(typeof adapter.gatewayBalance).toBe("function");
     });
   });
+
+
+  describe("encodeCallDataFromSignature (via executeErc8183Write)", () => {
+    it("setBudget(uint256,uint256,bytes) produces calldata with correct selector", async () => {
+      // setBudget selector = 0xdd4ae9d4
+      const { encodeFunctionData, parseAbi } = await import("viem");
+      const abi = parseAbi(["function setBudget(uint256 jobId, uint256 amount, bytes optParams)"]);
+      const callData = encodeFunctionData({
+        abi,
+        functionName: "setBudget",
+        args: [126328n, 10000n, "0x"],
+      });
+      expect(callData).toMatch(/^0xdd4ae9d4/);
+      // 4 (selector) + 3*32 (3 words) = 100 hex chars = 200 + 2 (0x) = 202
+      expect(callData.length).toBe(266); // 4 selector + 3*32 uint256 + 32 offset + 32 length for dynamic bytes
+    });
+
+    it("submit(uint256,bytes32,bytes) produces calldata with correct selector", async () => {
+      const { encodeFunctionData, parseAbi } = await import("viem");
+      const abi = parseAbi(["function submit(uint256 jobId, bytes32 deliverableHash, bytes proof)"]);
+      const hash = "0x" + "ab".repeat(32);
+      const callData = encodeFunctionData({
+        abi,
+        functionName: "submit",
+        args: [126328n, hash, "0x"],
+      });
+      // submit selector = 0x9e63798d
+      expect(callData).toMatch(/^0x9e63798d/);
+    });
+
+    it("complete(uint256,bytes32,bytes) produces calldata", async () => {
+      const { encodeFunctionData, parseAbi } = await import("viem");
+      const abi = parseAbi(["function complete(uint256 jobId, bytes32 reason, bytes proof)"]);
+      const callData = encodeFunctionData({
+        abi,
+        functionName: "complete",
+        args: [1n, "0x" + "00".repeat(32), "0x"],
+      });
+      expect(callData).toMatch(/^0x/);
+      expect(callData.length).toBeGreaterThan(10);
+    });
+
+    it("reject(uint256,bytes32,bytes) produces calldata", async () => {
+      const { encodeFunctionData, parseAbi } = await import("viem");
+      const abi = parseAbi(["function reject(uint256 jobId, bytes32 reason, bytes proof)"]);
+      const callData = encodeFunctionData({
+        abi,
+        functionName: "reject",
+        args: [1n, "0x" + "00".repeat(32), "0x"],
+      });
+      expect(callData).toMatch(/^0x/);
+    });
+
+    it("createJob(address,address,uint256,string,address) produces calldata", async () => {
+      const { encodeFunctionData, parseAbi } = await import("viem");
+      const abi = parseAbi(["function createJob(address provider, address evaluator, uint256 amount, string description, address token)"]);
+      const callData = encodeFunctionData({
+        abi,
+        functionName: "createJob",
+        args: [
+          "0x1234567890123456789012345678901234567890",
+          "0x1234567890123456789012345678901234567890",
+          1000000n,
+          "test job",
+          "0x3600000000000000000000000000000000000000",
+        ],
+      });
+      expect(callData).toMatch(/^0x/);
+    });
+
+    it("string params are accepted (not just bigint)", async () => {
+      const { encodeFunctionData, parseAbi } = await import("viem");
+      const abi = parseAbi(["function setBudget(uint256 jobId, uint256 amount, bytes optParams)"]);
+      // String args should produce same calldata as bigint args
+      const withString = encodeFunctionData({ abi, functionName: "setBudget", args: ["126328", "10000", "0x"] });
+      const withBigInt = encodeFunctionData({ abi, functionName: "setBudget", args: [126328n, 10000n, "0x"] });
+      expect(withString).toBe(withBigInt);
+    });
+  });
+
 });

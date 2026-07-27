@@ -13,10 +13,12 @@
     "start:prod": "node dist/index.js"
   },
   "dependencies": {
+    "@arclayer/circle-dev-wallet-adapter": "workspace:^",
     "@arclayer/langchain-adapter": "workspace:^",
     "@langchain/langgraph": "^1.4.4",
     "@langchain/openai": "^1.0.0",
     "langchain": "^1.0.0",
+    "viem": "^2.48.11",
     "zod": "^3.25.76"
   },
   "devDependencies": {

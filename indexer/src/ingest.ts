@@ -48,19 +48,27 @@ const REPUTATION_EVENT_ABIS = ERC8004_REPUTATION_REGISTRY_ABI.filter(
     (REPUTATION_EVENT_NAMES as readonly string[]).includes((item as { name?: string }).name ?? ""),
 );
 
+export type FailedBlockRange = {
+  fromBlock: bigint;
+  toBlock: bigint;
+  error: string;
+};
+
 export type FetchJobEventsResult = {
   events: IndexedJobEvent[];
+  failedRanges: FailedBlockRange[];
 };
 
 export type FetchAgentEventsResult = {
   events: IndexedAgentEvent[];
+  failedRanges: FailedBlockRange[];
 };
 
 export async function getLatestBlock() {
   return publicClient.getBlockNumber();
 }
 
-const MIN_CHUNK_BLOCKS = 500n;
+const MIN_CHUNK_BLOCKS = 50n;
 
 async function fetchEventsInRangeRaw(
   address: `0x${string}`,
@@ -80,25 +88,31 @@ async function fetchEventsInRangeRaw(
  * Fetch events with automatic range-split fallback.
  * If the full range RPC call fails, split in half and retry each chunk.
  * Recurses until chunks reach MIN_CHUNK_BLOCKS.
+ * Returns events and any ranges that failed at minimum size.
  */
 async function fetchEventsInRange(
   address: `0x${string}`,
   abi: readonly unknown[],
   fromBlock: bigint,
   toBlock: bigint,
-): Promise<any[]> {
+): Promise<{ events: any[]; failedRanges: FailedBlockRange[] }> {
   try {
-    return await fetchEventsInRangeRaw(address, abi, fromBlock, toBlock);
+    const events = await fetchEventsInRangeRaw(address, abi, fromBlock, toBlock);
+    return { events, failedRanges: [] };
   } catch (err) {
     const range = toBlock - fromBlock;
     if (range <= MIN_CHUNK_BLOCKS) {
-      // Already at minimum chunk size — propagate the error.
-      throw err;
+      // Already at minimum chunk size — log and record as failed range.
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[indexer] getLogs failed at min range: ${fromBlock}-${toBlock}, saved to failed_log_ranges`,
+      );
+      return { events: [], failedRanges: [{ fromBlock, toBlock, error: errMsg.slice(0, 500) }] };
     }
 
     const mid = fromBlock + range / 2n;
-    console.warn(
-      `[indexer] getLogs failed for range ${fromBlock}-${toBlock} (${range} blocks), splitting at ${mid}`,
+    console.log(
+      `[indexer] getLogs split: range ${fromBlock}-${toBlock} → [${fromBlock}-${mid}] + [${mid + 1n}-${toBlock}]`,
     );
 
     const [left, right] = await Promise.all([
@@ -106,7 +120,10 @@ async function fetchEventsInRange(
       fetchEventsInRange(address, abi, mid + 1n, toBlock),
     ]);
 
-    return [...left, ...right];
+    return {
+      events: [...left.events, ...right.events],
+      failedRanges: [...left.failedRanges, ...right.failedRanges],
+    };
   }
 }
 
@@ -119,10 +136,10 @@ export async function fetchJobEvents(
   toBlock: bigint,
 ): Promise<FetchJobEventsResult> {
   if (fromBlock > toBlock) {
-    return { events: [] };
+    return { events: [], failedRanges: [] };
   }
 
-  const collected = await fetchEventsInRange(
+  const { events: collected, failedRanges } = await fetchEventsInRange(
     CONTRACTS.ERC8183_AGENTIC_COMMERCE,
     ERC8183_AGENTIC_COMMERCE_ABI,
     fromBlock,
@@ -145,7 +162,7 @@ export async function fetchJobEvents(
       return a.logIndex - b.logIndex;
     });
 
-  return { events };
+  return { events, failedRanges };
 }
 
 /**
@@ -157,10 +174,10 @@ export async function fetchAgentEvents(
   toBlock: bigint,
 ): Promise<FetchAgentEventsResult> {
   if (fromBlock > toBlock) {
-    return { events: [] };
+    return { events: [], failedRanges: [] };
   }
 
-  const collected = await fetchEventsInRange(
+  const { events: collected, failedRanges } = await fetchEventsInRange(
     CONTRACTS.ERC8004_IDENTITY_REGISTRY,
     ERC8004_IDENTITY_REGISTRY_ABI,
     fromBlock,
@@ -216,11 +233,12 @@ export async function fetchAgentEvents(
       return a.logIndex - b.logIndex;
     });
 
-  return { events };
+  return { events, failedRanges };
 }
 
 export type FetchReputationEventsResult = {
   events: IndexedReputationEvent[];
+  failedRanges: FailedBlockRange[];
 };
 
 export async function fetchReputationEvents(
@@ -228,10 +246,10 @@ export async function fetchReputationEvents(
   toBlock: bigint,
 ): Promise<FetchReputationEventsResult> {
   if (fromBlock > toBlock) {
-    return { events: [] };
+    return { events: [], failedRanges: [] };
   }
 
-  const collected = await fetchEventsInRange(
+  const { events: collected, failedRanges } = await fetchEventsInRange(
     CONTRACTS.ERC8004_REPUTATION_REGISTRY,
     ERC8004_REPUTATION_REGISTRY_ABI,
     fromBlock,
@@ -274,7 +292,7 @@ export async function fetchReputationEvents(
       return a.logIndex - b.logIndex;
     });
 
-  return { events };
+  return { events, failedRanges };
 }
 
 // Re-export for backwards compatibility with any external importers.

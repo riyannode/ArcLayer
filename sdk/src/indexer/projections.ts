@@ -120,7 +120,7 @@ export function projectJobFromEvents(
   const budget = BigInt(latestBudget?.amount ?? 0);
 
   // Terminal priority: Completed(3) > Rejected(4) > Expired(5) > Submitted(2) > Funded(1) > Open(0)
-  const status = completed ? 3 : rejected ? 4 : expired ? 5 : submitted ? 2 : totalFunded > BigInt(0) ? 1 : 0;
+  const status = completed ? 3 : rejected ? 4 : expired ? 5 : submitted ? 2 : fundedEvents.length > 0 ? 1 : 0;
   const statusLabel = STATUS_LABELS[status];
 
   return {

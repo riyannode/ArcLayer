@@ -13,7 +13,7 @@ import {
   initiateDeveloperControlledWalletsClient,
   type CircleDeveloperControlledWalletsClient,
 } from "@circle-fin/developer-controlled-wallets";
-import { createPublicClient, http, parseAbi } from "viem";
+import { createPublicClient, http, parseAbi, encodeFunctionData } from "viem";
 import {
   BatchEvmScheme,
   GATEWAY_DOMAINS,
@@ -77,6 +77,51 @@ const ERC8183_SIGNATURES = new Set([
   "claimRefund(uint256)",
   "setProvider(uint256,address)",
 ]);
+// ── ERC-8183 ABI for encodeFunctionData ────────────────────────────────
+// Circle SDK abiParameters does NOT support bytes/bytes32 types.
+// Must pre-encode with viem encodeFunctionData and use callData instead.
+
+const ERC8183_ABI_MAP: Record<string, readonly string[]> = {
+  "setBudget(uint256,uint256,bytes)": [
+    "function setBudget(uint256 jobId, uint256 amount, bytes optParams)",
+  ],
+  "submit(uint256,bytes32,bytes)": [
+    "function submit(uint256 jobId, bytes32 deliverableHash, bytes proof)",
+  ],
+  "fund(uint256,bytes)": [
+    "function fund(uint256 jobId, bytes optParams)",
+  ],
+  "complete(uint256,bytes32,bytes)": [
+    "function complete(uint256 jobId, bytes32 reason, bytes proof)",
+  ],
+  "reject(uint256,bytes32,bytes)": [
+    "function reject(uint256 jobId, bytes32 reason, bytes proof)",
+  ],
+  "createJob(address,address,uint256,string,address)": [
+    "function createJob(address provider, address evaluator, uint256 amount, string description, address token)",
+  ],
+  "claimRefund(uint256)": [
+    "function claimRefund(uint256 jobId)",
+  ],
+  "setProvider(uint256,address)": [
+    "function setProvider(uint256 jobId, address provider)",
+  ],
+};
+
+function encodeErc8183CallData(signature: string, params: unknown[]): Hex {
+  const abiStrs = ERC8183_ABI_MAP[signature];
+  if (!abiStrs) {
+    throw new RunnerError("UNKNOWN_ABI_SIGNATURE", `No ABI for ${signature}`, 500);
+  }
+  const [funcName] = signature.split("(");
+  const abi = parseAbi(abiStrs);
+  return encodeFunctionData({
+    abi,
+    functionName: funcName,
+    args: params,
+  });
+}
+
 
 // ── Chain Mapping ──────────────────────────────────────────────────────
 
@@ -406,9 +451,12 @@ export class CircleDevWalletAdapter implements WalletExecutionAdapter {
       throw new RunnerError("ERC8183_SIGNATURE_BLOCKED",
         `Signature "${input.signature}" is not in the ERC-8183 lifecycle allowlist`, 403);
     }
+    // Pre-encode calldata — Circle SDK abiParameters does NOT support bytes/bytes32
+    // Pre-encode callData via viem; Circle SDK abiParameters does not support bytes/bytes32.
+    const callData = encodeErc8183CallData(input.signature, input.params);
     return this.executeContractTransaction(
       input.contract, input.signature, input.params,
-      `erc8183.${input.signature.split("(")[0]}`, input.idempotencyKey,
+      `erc8183.${input.signature.split("(")[0]}`, input.idempotencyKey, callData,
     );
   }
 
@@ -435,32 +483,56 @@ export class CircleDevWalletAdapter implements WalletExecutionAdapter {
       throw new RunnerError("ARC_CONTRACT_METHOD_BLOCKED",
         "Only allowlisted ArcLayer contract methods are allowed", 403);
     }
+    // submit(uint256,bytes32,bytes) has bytes params — must use pre-encoded callData.
+    // register(string) has no bytes params — safe to use abiFunctionSignature path.
+    const label = `arc.${input.signature.split("(")[0]}`;
+    if (input.signature === "submit(uint256,bytes32,bytes)") {
+      const callData = encodeErc8183CallData(input.signature, input.params);
+      return this.executeContractTransaction(
+        input.contract, input.signature, input.params, label, input.idempotencyKey, callData,
+      );
+    }
     return this.executeContractTransaction(
-      input.contract, input.signature, input.params,
-      `arc.${input.signature.split("(")[0]}`, input.idempotencyKey,
+      input.contract, input.signature, input.params, label, input.idempotencyKey,
     );
   }
 
   private async executeContractTransaction(
     contractAddress: string, abiFunctionSignature: string,
-    abiParameters: string[], label: string, idempotencyKey?: string,
+    abiParameters: string[], label: string, idempotencyKey?: string, callData?: Hex,
   ): Promise<WalletExecuteResult> {
     try {
       const client = this.getClient();
 
-      if (!idempotencyKey) {
-        throw new RunnerError("MISSING_IDEMPOTENCY_KEY",
-          `${label} requires gateway idempotencyKey`, 500);
-      }
+      // Runner-level idempotency handled by ExecutionGateway; not forwarded to Circle SDK.
 
-      const resp = await client.createContractExecutionTransaction({
-        walletId: this.walletId,
-        contractAddress,
-        abiFunctionSignature,
-        abiParameters,
-        fee: { type: "level", config: { feeLevel: "MEDIUM" } },
-        idempotencyKey,
-      });
+      // Circle SDK callData is mutually exclusive with abiFunctionSignature + abiParameters.
+      // For ERC-8183 methods with bytes/bytes32 params, caller pre-encodes callData via viem.
+      // Minimal shape: {walletId, contractAddress, callData, fee}. No blockchain, no idempotencyKey.
+      // Circle API rejects non-UUID idempotencyKey (code=2). SDK auto-generates UUID.
+      // Runner-level idempotency handled by ExecutionGateway.
+      
+      const txRequest = callData
+        ? { walletId: this.walletId, contractAddress, callData, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } } }
+        : { walletId: this.walletId, contractAddress, abiFunctionSignature, abiParameters, fee: { type: "level" as const, config: { feeLevel: "MEDIUM" as const } } };
+
+      // Diagnostic: log call metadata (no secrets)
+      const diagParts = [`label=${label}`, `contract=${contractAddress}`, `blockchain=${this.chain}`, `params=${abiParameters.length}`];
+      if (callData) {
+        diagParts.push(`callData=${callData.length}chars`);
+        diagParts.push(`selector=${callData.slice(0, 10)}`);
+        diagParts.push(`hasAbiSig=${"abiFunctionSignature" in txRequest}`);
+        diagParts.push(`hasAbiParams=${"abiParameters" in txRequest}`);
+      } else {
+        diagParts.push(`sig=${abiFunctionSignature}`);
+      }
+      diagParts.push(`hasWalletId=${!!this.walletId}`);
+      diagParts.push(`hasBlockchain=${!!("blockchain" in txRequest)}`);
+      process.stdout.write(`[circle-adapter] ${diagParts.join(" | ")}\n`);
+
+      const resp = await client.createContractExecutionTransaction(
+        txRequest as unknown as Parameters<typeof client.createContractExecutionTransaction>[0],
+      );
 
       const transactionId = resp.data?.id as string | undefined;
       if (!transactionId) {
@@ -477,7 +549,14 @@ export class CircleDevWalletAdapter implements WalletExecutionAdapter {
         ok: state === "COMPLETE",
         data: { id: transactionId, state, txHash },
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      // Sanitized error logging — no secrets
+      const errObj = error as Record<string, unknown>;
+      const respData = (errObj as any)?.response?.data ?? (errObj as any)?.error?.response?.data;
+      const respStatus = (errObj as any)?.response?.status ?? (errObj as any)?.error?.response?.status;
+      const errCode = respData?.code ?? respData?.errorCode;
+      const errMsg = respData?.message ?? respData?.error;
+      process.stderr.write(`[circle-adapter-debug] ${label} error: status=${respStatus} code=${errCode} message=${errMsg} callData=${callData ? "yes" : "no"} blockchain=${this.chain}\n`);
       throw new RunnerError("CIRCLE_API_ERROR", `${label} failed: ${sanitizeError(error)}`, 502);
     }
   }

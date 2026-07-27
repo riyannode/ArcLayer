@@ -39,6 +39,29 @@ export class SpendLedger {
     fs.appendFileSync(this.filePath, JSON.stringify(entry) + "\n");
   }
 
+  /** Mark a reserved entry as confirmed or failed by operationId or idempotencyKey. */
+  markState(filter: { operationId?: string; idempotencyKey?: string }, newState: "confirmed" | "failed"): boolean {
+    const entries = this.list();
+    let changed = false;
+    for (const entry of entries) {
+      if (entry.state !== "reserved") continue;
+      const matchOp = filter.operationId && entry.operationId === filter.operationId;
+      const matchKey = filter.idempotencyKey && entry.idempotencyKey === filter.idempotencyKey;
+      if (matchOp || matchKey) {
+        entry.state = newState;
+        entry.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+    }
+    if (changed) {
+      const tmpPath = this.filePath + ".tmp";
+      const content = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
+      fs.writeFileSync(tmpPath, content);
+      fs.renameSync(tmpPath, this.filePath);
+    }
+    return changed;
+  }
+
   getSpent(input: {
     walletAddress: string;
     window: "daily" | "monthly";
