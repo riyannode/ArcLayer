@@ -14,7 +14,7 @@
     "@arclayer/sdk": "workspace:*",
     "@circle-fin/modular-wallets-core": "^1.0.13",
     "@circle-fin/x402-batching": "^3.0.4",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@reown/appkit": "^1.8.19",
     "@reown/appkit-adapter-wagmi": "^1.8.19",
     "@supabase/supabase-js": "^2.105.4",
